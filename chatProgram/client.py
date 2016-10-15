@@ -14,9 +14,10 @@ def send_message(my_socket,client_ID):
 	while True:
 		sys.stdout.write('['+client_ID+']>>')
 		message = input('')
-		my_socket.send(('['+client_ID+']>>' + message).encode())
 		if message[0:4].lower() == 'quit':
 			break
+		else:
+			my_socket.send(('['+client_ID+']>>' + message).encode())
 	print('Host Disconnect')
 	message = '\nExit chatroom'
 	my_socket.send((message+'['+client_ID+']' ).encode())
