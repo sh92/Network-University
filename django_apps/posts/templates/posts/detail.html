@@ -1,0 +1,10 @@
+{% extends "posts/base.html"%}
+{% block head_title %}{{instance.title}} | {{block.super}} {% endblock head_title%}
+{% block content %}
+    <h1>{{title}} is workiing</h1>
+    {{ instance.title}} </a><br/>
+    {{ instance.content }}<br/>
+    {{ instance.timestamp}}<br/>
+    {{ instance.update}}<br/>
+    {{ instance.id}}<br/>
+{% endblock content %}
