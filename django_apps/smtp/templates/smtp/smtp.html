@@ -1,0 +1,31 @@
+{% extends "smtp/base.html"%}
+{% block content %}
+<h1>SMTP MAIL TRANSFER</h1>
+<form method="POST" action='complete/'>{%csrf_token%}
+<label for ="ID">ID: </label>
+<input id="ID" name="ID" autocomplete="off">
+<label for ="PASSWORD">PASSWORD: </label>
+<input type="password" id="PASSWORD" name="PASSWORD" autocomplete="off">
+<br>
+
+<label for="EMAIL_FROM">EMAIL_FROM: </label>
+<input id="EMAIL_FROM" name="EMAIL_FROM">
+<br>
+
+<label for="EMAIL_TO">EMAIL_TO: </label>
+<input id="EMAIL_TO" name="EMAIL_TO">
+<br>
+
+<label for="SUBJECT">SUBJECT: </label>
+<input id="SUBJECT" name="SUBJECT">
+<br>
+
+<label for="BODY">BODY: </label>
+<br>
+<textarea name="BODY" id="BODY">
+</textarea>
+<br>
+
+<input type="submit" value ="MAIL"/>
+</form>
+{%endblock content%}
