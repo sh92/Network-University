@@ -14,7 +14,7 @@ class ThreadedServer(object):
         while True:
             message = input('[Server]')
             self.broadcast(message,client,address)
-            if message[0:4].lower() == 'quit':
+            if message[8:12].lower() == 'quit':
                 break
 
     def listen(self):
@@ -50,7 +50,6 @@ class ThreadedServer(object):
             except:
                 client.close()
                 return False
-
 
 if __name__ == "__main__":
     port_num = input("Port? ")

@@ -5,7 +5,7 @@ def recv_message(message_socket,client_ID):
 	while True:
 		message = message_socket.recv(4096).decode()
 		sys.stdout.write('\n'+message+'\n['+client_ID+']>>')
-		if message[7:11].lower() == 'quit':
+		if message[8:11].lower() == 'quit':
 			break
 	print('Host Disconnected')
 def send_message(my_socket,client_ID):
