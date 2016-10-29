@@ -18,7 +18,7 @@ class ThreadedServer(object):
                 break
 
     def listen(self):
-        self.sock.listen(5)
+        self.sock.listen(10)
         while True:
             client, address = self.sock.accept()
             client.settimeout(600)
@@ -42,7 +42,6 @@ class ThreadedServer(object):
                 if data:
                     response = data.decode('utf-8')
                     print(response)
-                    print('[Server]')
                     self.broadcast(response,client,address)
                 else:
                     self.connections.remove((client,address)) 
