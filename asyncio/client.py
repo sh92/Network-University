@@ -2,7 +2,7 @@ import asyncio
 
 @asyncio.coroutine
 def tcp_echo_client(message, loop):
-    reader, writer = yield from asyncio.open_connection('127.0.0.1', 8888,
+    reader, writer = yield from asyncio.open_connection('192.168.0.6', 5000,
                                                         loop=loop)
 
     print('Send: %r' % message)
