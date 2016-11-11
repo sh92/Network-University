@@ -16,6 +16,47 @@ if len(sys.argv) < 3:
 	sys.exit()
 '''
 
+def printPacket(packet):
+    packet= packet[0]
+    ip_header = packet[0:20]
+    iph = unpack('!BBHHHBBH4s4s' , ip_header)
+    version_ihl = iph[0]
+    version = version_ihl >> 4
+    ihl = version_ihl & 0xF
+    iph_length = ihl * 4
+    ttl = iph[5]
+    protocol = iph[6]
+    s_addr = socket.inet_ntoa(iph[8]);
+    d_addr = socket.inet_ntoa(iph[9]);
+     
+    #print 'Version : ' + str(version) + ' IP Header Length : ' + str(ihl) + ' TTL : ' + str(ttl) + ' Protocol : ' + str(protocol) + ' Source Address : ' + str(s_addr) + ' Destination Address : ' + str(d_addr)
+     
+    tcp_header = packet[iph_length:iph_length+20]
+     
+    #now unpack them :)
+    tcph = unpack('!HHLLBBHHH' , tcp_header)
+     
+    source_port = tcph[0]
+    dest_port = tcph[1]
+    sequence = tcph[2]
+    acknowledgement = tcph[3]
+    doff_reserved = tcph[4]
+    tcph_length = doff_reserved >> 4
+    flags = tcph[5]
+    ack = (flags >> 4) & 1
+    print "ack : ", ack
+     
+    #print 'Source Port : ' + str(source_port) + ' Dest Port : ' + str(dest_port) + ' Sequence Number : ' + str(sequence) + ' Acknowledgement : ' + str(acknowledgement) + ' TCP header length : ' + str(tcph_length)
+     
+    h_size = iph_length + tcph_length * 4
+    data_size = len(packet) - h_size
+     
+    #get data from the packet
+    data = packet[h_size:]
+    print 'Data : ' + data
+    print
+    return acknowledgement,flags
+
 def check_md5(file_path, block_size=1460):
     md5 = hashlib.md5()
     try:
@@ -88,7 +129,7 @@ def make_tcp_checksum(src_ip,dest_ip,tmp_hdr,data):
         #tcp_checksum= checksum(tmp)
 	return tcp_checksum
 
-def tcp_packet(seqNo,src_port,dest_port,src_ip,dest_addr,data,falgs):
+def tcp_packet(seqNo,src_port,dest_port,src_ip,dest_ip,data,falgs):
 
         tcp_src_port = src_port
         tcp_dest_port = dest_port
@@ -115,19 +156,33 @@ def tcp_packet(seqNo,src_port,dest_port,src_ip,dest_addr,data,falgs):
 	return tcp_header
 
 
-def make_packet(src_ip,dest_ip,src_port,dest_port,seqNo,data,ip_packet,flags):
+def make_packet(seqNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header):
     tcp_header = tcp_packet(seqNo, src_port,dest_port,src_ip,dest_ip, data,flags)
     return ip_header + tcp_header + data
 
 
 try:
     sock= socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
+    recv_sock= socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
     #s.settimeout(0.1)
     #filesize = os.path.getsize(filePath)
 except socket.error , msg:
     print "Scoket could not be creadted. Erorr Code : " + str(msg[0]) + ' Message ' +msg[1]
     sys.exit()
 
+def send_Data(packet,seqNo):
+    while True:
+        try:
+            sock.sendto(packet,(dest_ip, 0))
+	    Reply= recv_sock.recvfrom(buffer_size)
+	    recvSeq , ack = printPacket(Reply)
+            if recvSeq == (seqNo+1) and ack==1:
+                print "ACK receive",seqNo+1
+                break
+            else:
+                print "NAK receive",seqNo
+        except socket.timeout:
+              print "time out, resend! seq No:",seqNo
 
 
 packet = ' '
@@ -144,7 +199,7 @@ maximumSeqSize = int('0xffffffff',16)
 if maximumSeqSize < DataSize:
     print "File Size should be less than " , maximumSeqSize , " Byte"
     raise Exception("OverSizeException")
-print "Data is ", DataSize
+print "Data size is ", DataSize
 
 seqNo=0
 
@@ -152,44 +207,21 @@ seqNo=0
 data = filePath
 print data
 flags  = {'fin':0,'syn':1,'rst':0,'psh':0,'ack':0,'urg':0}
-packet = make_packet(src_ip,dest_ip,src_port,dest_port,data,seqNo,ip_packet,flags)
-
-
-while True:
-    try:
-        sock.sendto(packet,(dest_ip, 0))
-        Reply= sock.recvfrom(buffer_size);
-	print Reply
-        if Reply == 'ACK'+str(seqNo+1):
-            print "ACK receive",seqNo
-            break
-        elif Reply== "NAK"+str(seqNo):
-            print "NAK receive",seqNo
-    except socket.timeout:
-        print "time out, resend! seq No:",seqNo
-
+packet = make_packet(seqNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
+send_Data(packet,seqNo)
 print "FileName : ", filePath
+
 
 nextSeqNo = seqNo + len(data)
 seqNo = nextSeqNo
 print seqNo+"@"
+
 #filesize
 data = str(filesize)
-nextSeqNo=  seqNo +len(data)
-tcp_header = tcp_packet(seqNo, src_port,dest_port,src_ip,dest_ip, data)
-packet = ip_header + tcp_header + data
-sock.sendto(packet,(dest_ip, dest_port))
-while True:
-    try:
-        sock.sendto(packet,(dest_ip, dest_port))
-        Reply= sock.recvfrom(buffer_size);
-        if Reply == 'ACK'+str(seqNo+1):
-            print "ACK receive ",seqNo
-            break;
-        elif Reply =="NAK"+str(seqNo):
-            print "NAK receive ",seqNo
-    except socket.timeout:
-      print "time out, resend! seq No:",seqNo
+nextSeqNo=  seqNo +len(data,seqNo)
+flags  = {'fin':0,'syn':1,'rst':0,'psh':0,'ack':0,'urg':0}
+packet = make_packet(seqNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
+send_Data(packet)
 
 print "FileSize : ", filesize
 
