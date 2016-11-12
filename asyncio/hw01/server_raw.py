@@ -102,8 +102,18 @@ def printPacket(packet):
     protocol = iph[6]
     s_addr = socket.inet_ntoa(iph[8]);
     d_addr = socket.inet_ntoa(iph[9]);
+
+    line()
+    print "=================================="
+    print "Internet Protocol"
+    print "=================================="
      
-    print 'Version : ' + str(version) + ' IP Header Length : ' + str(ihl) + ' TTL : ' + str(ttl) + ' Protocol : ' + str(protocol) + ' Source Address : ' + str(s_addr) + ' Destination Address : ' + str(d_addr)
+    print 'Version : ' + str(version)
+    print 'IP Header Length : ' + str(ihl)
+    print 'TTL : ' + str(ttl)
+    print 'Protocol : ' + str(protocol)
+    print 'Source Address : ' + str(s_addr)
+    print 'Destination Address : ' + str(d_addr)
      
     tcp_header = packet[iph_length:iph_length+20]
      
@@ -125,12 +135,21 @@ def printPacket(packet):
     rst = (flags & 0x4) >> 2
     syn = (flags & 0x2) >> 1
     fin = (flags & 0x1) 
+
+    print "=================================="
+    print "Transport Control Protocol"
+    print "=================================="
+    print 
     print "flags ", hex(flags)
     print "syn: ", syn
     print "ack: ", ack
     print "fin: ", fin
      
-    print 'Source Port : ' + str(src_port) + ' Dest Port : ' + str(dest_port) + ' Sequence Number : ' + str(sequence) + ' Acknowledgement : ' + str(acknowledgement) + ' TCP header length : ' + str(tcp_hdr_length)
+    print 'Source Port : ' + str(src_port) 
+    print 'Dest Port : ' + str(dest_port) 
+    print 'Sequence Number : ' + str(sequence) 
+    print 'Acknowledgement : ' + str(acknowledgement) 
+    print 'TCP header length : ' + str(tcp_hdr_length)
      
     h_size = iph_length + tcp_hdr_length * 4
     data_size = len(packet) - h_size
@@ -138,39 +157,33 @@ def printPacket(packet):
     #get data from the packet
     data = packet[h_size:]
     print 'Data : ' + data
+    line()
     print
     return sequence,acknowledgement,data, s_addr, d_addr, src_port,dest_port,ip_header,syn,ack,fin
-   
 
-def receiveData():
-    print '----------------------------------------------------------------------'
+def line():
+    print '-----------------------------------------------------------------------' 
+def arrow_line():
+    print '>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>'
+
+def syncronization():
+    recv_syn()
+    recv_ack()
+
+def finalization():
+    recv_fin()
+    recv_ack()
+
+
+def recv_fin():
+    arrow_line()
+    print "Fin Wating ..."
     while True:
          try:
               packet= sock.recvfrom(buffer_size)
 	      recvSeq,ackSeq,data,src_ip, dest_ip, src_port,dest_port,ip_header, syn, ack, fin= printPacket(packet)
-	      print "recvSeq ", recvSeq
-              if ack==1 :
-                   print "get ACK"
-                   print
-                   break
-              elif syn==1 :
-                   print "get SYN"
-                   print
-
-                   print 'send ACK'
-                   flags = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':1,'urg':0}
-                   ackSeq  =  recvSeq + 1
-                   packet = make_packet(recvSeq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header)
-                   sock.sendto(packet,(dest_ip,dest_port))
-
-                   print 'send SYN'
-                   recvSeq = recvSeq + 10
-                   flags = {'fin':0,'syn':1,'rst':0,'psh':0,'ack':0,'urg':0}
-                   packet = make_packet(recvSeq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header)
-                   sock.sendto(packet,(dest_ip,dest_port))
-                   break
-              elif fin==1 :
-                   print "get FIN"
+              if fin==1 :
+                   print "[Receive FIN]"
                    print
                    print "send ACK"
                    ackSeq  =  recvSeq + 1
@@ -179,29 +192,72 @@ def receiveData():
                    sock.sendto(packet,(dest_ip,dest_port))
 
 
-                   print "send FIN"
+                   print "[Send FIN]"
                    recvSeq = recvSeq + 10
                    flags = {'fin':1,'syn':0,'rst':0,'psh':0,'ack':0,'urg':0}
                    packet = make_packet(recvSeq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header)
                    sock.sendto(packet,(dest_ip,dest_port))
                    break
-              else:
-                   print " receive data : ",data 
-                   print "send ACK"
-                   flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':1,'urg':0}
-                   ackSeq  =  recvSeq + 1
-                   recvSeq = recvSeq + 10
-                   packet = make_packet(recvSeq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header)
-                   sock.sendto(packet, (dest_ip,dest_port))
+         except socket.timeout:
+              print "retransmit NAK packet"
+
+
+def recv_syn():
+    arrow_line()
+    print "SYN Wating ..."
+    while True:
+         try:
+              packet= sock.recvfrom(buffer_size)
+	      recvSeq,ackSeq,data,src_ip, dest_ip, src_port,dest_port,ip_header, syn, ack, fin= printPacket(packet)
+              if syn==1 :
+                   print "[Receive SYN]"
                    print
+
+                   print '[Send ACK]'
+                   flags = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':1,'urg':0}
+                   ackSeq  =  recvSeq + 1
+                   packet = make_packet(recvSeq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header)
+                   sock.sendto(packet,(dest_ip,dest_port))
+
+                   print '[Send SYN]'
+                   recvSeq = recvSeq + 10
+                   flags = {'fin':0,'syn':1,'rst':0,'psh':0,'ack':0,'urg':0}
+                   packet = make_packet(recvSeq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header)
+                   sock.sendto(packet,(dest_ip,dest_port))
                    break
          except socket.timeout:
-              flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':0,'urg':0}
-              ackSeq = 0 
-              packet = make_packet(prev_seq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header)
               print "retransmit NAK packet"
- #             sock.sendto(pacekt, (dest_ip,dest_port))
-    print '----------------------------------------------------------------------'
+
+
+def recv_ack():
+    arrow_line()
+    print "ACK Wating ..."
+    while True:
+        try:
+            packet= sock.recvfrom(buffer_size)
+	    recvSeq,ackSeq,data,src_ip, dest_ip, src_port,dest_port,ip_header, syn, ack, fin= printPacket(packet)
+            if  ack == 1:
+                print "[Receive ACK]", recvSeq
+                break
+        except socket.timeout:
+              print "time out, resend! seq No:",seqNo
+
+def receiveData():
+    line()
+    try:
+        packet= sock.recvfrom(buffer_size)
+        recvSeq,ackSeq,data,src_ip, dest_ip, src_port,dest_port,ip_header, syn, ack, fin= printPacket(packet)
+        print "send ACK"
+        flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':1,'urg':0}
+        ackSeq  =  recvSeq + 1
+        recvSeq = recvSeq + 10
+        packet = make_packet(recvSeq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header)
+        sock.sendto(packet, (dest_ip,dest_port))
+        print
+    except socket.timeout:
+        print "retransmit NAK packet"
+    line()
+    recv_ack()
     return data 
 
 try:
@@ -217,8 +273,7 @@ except socket.error , msg:
 print "############################################################"
 print"Syncronization"
 print "############################################################"
-syn= receiveData()
-ack= receiveData()
+syncronization()
 print 
 
 print "############################################################"
@@ -238,8 +293,7 @@ print
 print "############################################################"
 print"finalization"
 print "############################################################"
-fin= receiveData()
-ack= receiveData()
+finalization()
 print
 
 '''

@@ -30,13 +30,9 @@ def printPacket(packet):
     s_addr = socket.inet_ntoa(iph[8]);
     d_addr = socket.inet_ntoa(iph[9]);
      
-    #print 'Version : ' + str(version) + ' IP Header Length : ' + str(ihl) + ' TTL : ' + str(ttl) + ' Protocol : ' + str(protocol) + ' Source Address : ' + str(s_addr) + ' Destination Address : ' + str(d_addr)
-     
     tcp_header = packet[iph_length:iph_length+20]
-     
     #now unpack them :)
     tcph = unpack('!HHLLBBHHH' , tcp_header)
-     
     source_port = tcph[0]
     dest_port = tcph[1]
     sequence = tcph[2]
@@ -52,7 +48,14 @@ def printPacket(packet):
     rst = (flags & 0x4) >> 2
     syn = (flags & 0x2) >> 1
     fin = (flags & 0x1) 
+    line()
+    print "sequence" , sequence
+    print "acknowledgement",acknowledgement
     print "flags ",hex(flags)
+    print "ack ",ack
+    print "syn ",syn
+    print "fin ",fin
+    line()
      
     #print 'Source Port : ' + str(source_port) + ' Dest Port : ' + str(dest_port) + ' Sequence Number : ' + str(sequence) + ' Acknowledgement : ' + str(acknowledgement) + ' TCP header length : ' + str(tcph_length)
      
@@ -195,12 +198,7 @@ def recv_syn_ack(packet,seqNo):
                 break
 	    Reply= recv_sock.recvfrom(buffer_size)
 	    recv_sequence,recv_ack,syn,ack,fin = printPacket(Reply)
-            print "SeqNo" , seqNo
-            print "recv_sequence ",recv_sequence
-            print "recv_ack",recv_ack
-            print "ack ",ack
-            print "syn ",syn
-            print "fin ",fin
+            line()
             if  syn==1:
                 flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':1,'urg':0}
                 packet = make_packet(recv_ack+1,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
@@ -210,6 +208,7 @@ def recv_syn_ack(packet,seqNo):
             elif  ack == 1:
                 print "ACK receive", recv_ack
                 isACK=1
+            line()
         except socket.timeout:
               print "time out, resend! seq No:",seqNo
               sock.sendto(packet,(dest_ip, 0))
