@@ -164,108 +164,27 @@ def tcp_packet(seqNo,src_port,dest_port,src_ip,dest_ip,data,falgs):
 	return tcp_header
 
 
-def line():
-    print '-----------------------------------------------------------------------' 
-
 def make_packet(seqNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header):
     tcp_header = tcp_packet(seqNo, src_port,dest_port,src_ip,dest_ip, data,flags)
     return ip_header + tcp_header + data
 
 
 
+
 def syncronization(packet,seqNo):
     sock.sendto(packet,(dest_ip, 0))
-    recv_syn_ack(packet,seqNo)
+    receive_data(packet,seqNo)
+    receive_data(packet,seqNo)
 
 def finalization(packet,serNo):
     sock.sendto(packet,(dest_ip, 0))
-    recv_fin_ack(packet,seqNo)
+    receive_data(packet,seqNo)
+    receive_data(packet,seqNo)
 
 def send_Data(packet,seqNo):
     sock.sendto(packet,(dest_ip, 0))
-    #threading.Thread(target = recv_ack, args=(sock)).start()
+    receive_data(packet,seqNo)
 
-def recv_syn_ack(packet,seqNo):
-    line()
-    isSYN=0
-    isACK=0
-    while True:
-        try:
-            if isSYN==1 and isACK==1:
-                break
-	    Reply= recv_sock.recvfrom(buffer_size)
-	    recv_sequence,recv_ack,syn,ack,fin = printPacket(Reply)
-            print "SeqNo" , seqNo
-            print "recv_sequence ",recv_sequence
-            print "recv_ack",recv_ack
-            print "ack ",ack
-            print "syn ",syn
-            print "fin ",fin
-            if  syn==1:
-                flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':1,'urg':0}
-                packet = make_packet(recv_ack+1,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
-                send_Data(packet,recv_ack)
-                print "SYN receive", recv_ack
-                isSYN=1
-            elif  ack == 1:
-                print "ACK receive", recv_ack
-                isACK=1
-        except socket.timeout:
-              print "time out, resend! seq No:",seqNo
-              sock.sendto(packet,(dest_ip, 0))
-    line()
-
-def recv_ack(packet,seqNo):
-    line()
-    while True:
-        try:
-	    Reply= recv_sock.recvfrom(buffer_size)
-	    recv_sequence,recv_ack,syn,ack,fin = printPacket(Reply)
-            print "SeqNo" , seqNo
-            print "recv_sequence ",recv_sequence
-            print "recv_ack",recv_ack
-            print "ack ",ack
-            print "syn ",syn
-            print "fin ",fin
-            if  ack == 1:
-                print "ACK receive", recv_ack
-                break
-        except socket.timeout:
-              print "time out, resend! seq No:",seqNo
-              sock.sendto(packet,(dest_ip, 0))
-    line()
-
-
-def recv_fin_ack(packet,seqNo):
-    line()
-    isFIN=0
-    isACK=0
-    while True:
-        try:
-            if isFIN ==1 and isACK ==1:
-                break
-	    Reply= recv_sock.recvfrom(buffer_size)
-	    recv_sequence,recv_ack,syn,ack,fin = printPacket(Reply)
-            print "SeqNo" , seqNo
-            print "recv_sequence ",recv_sequence
-            print "recv_ack",recv_ack
-            print "ack ",ack
-            print "syn ",syn
-            print "fin ",fin
-            if fin==1:
-                flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':1,'urg':0}
-                packet = make_packet(recv_ack+1,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
-                send_Data(packet,recv_ack)
-                print "FIN receive", recv_ack
-                isFIN=1
-            elif  ack == 1:
-                print "ACK receive", recv_ack
-                isACK=1
-        except socket.timeout:
-              print "time out, resend! seq No:",seqNo
-              sock.sendto(packet,(dest_ip, 0))
-    line()
- 
 
 def receive_data(packet,seqNo):
     print '-----------------------------------------------------------------------' 
@@ -309,7 +228,15 @@ except socket.error , msg:
     print "Scoket could not be creadted. Erorr Code : " + str(msg[0]) + ' Message ' +msg[1]
     sys.exit()
 
+def main():
+	print("Host connected")
+	message = 'Enter chatroom'
+	client_socket.send((message+'['+client_ID+']' ).encode())
+	threading.Thread(target = recv_message, args=(sock)).start()
+	threading.Thread(target = send_message, args=(sock)).start()
 
+if __name__ == '__main__':
+	main()
 packet = ' '
 src_ip = '127.0.0.1'
 dest_ip = '127.0.0.1'
@@ -350,7 +277,6 @@ print
 flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':0,'urg':0}
 packet = make_packet(seqNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
 send_Data(packet,seqNo)
-recv_ack(packet,seqNo)
 print
 
 
@@ -387,3 +313,129 @@ packet = make_packet(seqNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_heade
 finalization(packet,seqNo)
 print
 
+
+'''
+start_time = time.time()
+Buffer=  {}
+Rremain=filesize
+remain= filesize% buffer_size
+Rsize = size
+isSend = {}
+isACK = {}
+isSend = isSend.fromkeys(range(DataSize+2),[])
+isACK= isACK.fromkeys(range(DataSize+2),[])
+ackSeqSize = 8
+charSize = 3
+for i in range(DataSize+2):
+    isSend[i].append(0)
+    isACK[i].append(0)
+'''
+
+'''
+with open(filePath, 'rb') as f:
+    start_time = time.time()
+    while True:
+        if Remain ==0:
+            break
+	#### Send Frame ####
+        for i in range(wfrom,wto):
+            if i >= DataSize+1:
+                continue
+            if isACK[i+1]==1:
+                continue
+            if isSend[i] == 1 :
+                continue
+            frame_size = buffer_size
+            read_data = f.read(frame_size)
+            seq='{0:08x}'.format(i)
+            checksum=check_md5(read_data)
+            checksumSeq =  "{0:04x}".format(checksum)
+            checksumInt =  int (checksumSeq,16)
+            Buffer[i%DataSize] = read_data+str(seq)+checksumSeq
+         for i in range(wfrom, wto):
+            #for i in range(wto-1,wfrom-1,-1):   # reverse
+            if i >= DataSize+1:
+                 continue
+            if isACK[i+1]==1:
+                 continue
+            if isSend[i] == 1 :
+                 continue
+                #time.sleep(1)
+            print "send seqNo",i %DataSize
+            sock.sendto(Buffer[i % DataSize],(dest_ip,dest_port))
+            isSend[i] =1
+
+	    packet = tcp_packet(seq,data)
+            s.sendto(packet, (dest_ip, 0))
+        
+
+        #### Receive Reply ####
+      	start = wfrom
+      	end=wto
+      	print "window start : ",start
+      	print "window end :  " , end-1
+
+        try :
+            ACK,addr = sock.recvfrom(charSize+ackSeqSize)
+            frameSeq = ACK[charSize:]
+            frameNo = int(frameSeq,16)
+            print "frameNo: " , frameNo
+            print "seqNo: " , frameNo %DataSize
+            if frameNo in range(start,end+1):
+            ### ACK ####
+            if ACK == 'ACK'+str(frameSeq):
+                if isACK[frameNo] ==1 :
+                    continue 
+            print "ACK receive", frameNo %DataSize
+            if frameNo == DataSize+1:
+                Rremain -= remain
+                Rsize += remain
+            else:
+                Rremain-=buffer_size
+                Rsize += buffer_size
+
+            print Rsize , "/",filesize , "(Currentsize/Totalsize) , ", round((100.00 * Rsize/int(filesize)),2), "%"
+
+            isACK[frameNo] =1
+            #window move
+            if frameNo==wfrom+1:
+                n=frameNo
+                while True:
+                    if n >=DataSize+1:
+                        break
+                    if isACK[n] == 1:
+                        wfrom+=1
+                        wto+=1
+                        n+=1
+                    else:
+                        break
+
+            ### NAK ###
+            elif ACK == "NAK"+str(frameSeq): 
+                if isACK[frameNo+1] ==1:
+                continue
+            print "NAK receive", frameNo %DataSize
+            print "resend!",frameNo %DataSize
+            sock.sendto(Buffer[frameNo%DataSize],(dest_ip,dest_port))
+      ### time out ###
+        except socket.timeout:
+            for i in range (start, end):
+                if i>= DataSize+1:
+                    break 
+                if isACK[i+1] ==1:
+                    continue
+                if isSend[i] ==1:
+                    print "Timeout , resend! from seqNo",i%DataSize
+                    sock.sendto(Buffer[i%DataSize],(dest_ip,dest_port))
+                    continue
+
+    print "Completed ..."
+    end_time = time.time()
+    print "Time elapsed : ", end_time - start_time
+except Exception as error:
+  print('caught this error: ' + repr(error))
+except socket.error as e:
+  print e
+  sys.exit()
+
+'''
