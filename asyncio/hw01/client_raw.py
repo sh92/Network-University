@@ -16,6 +16,10 @@ if len(sys.argv) < 3:
 	print '[Dest IP Addr] [Dest Port] [File Path]'
 	sys.exit()
 '''
+src_ip = '127.0.0.1'
+dest_ip = '192.168.0.2'
+src_port = 1234
+dest_port = 80
 
 def printPacket(packet):
     packet= packet[0]
@@ -29,6 +33,16 @@ def printPacket(packet):
     protocol = iph[6]
     s_addr = socket.inet_ntoa(iph[8]);
     d_addr = socket.inet_ntoa(iph[9]);
+    print "=================================="
+    print "Internet Protocol"
+    print "=================================="
+     
+    print 'Version : ' + str(version)
+    print 'IP Header Length : ' + str(ihl)
+    print 'TTL : ' + str(ttl)
+    print 'Protocol : ' + str(protocol)
+    print 'Source Address : ' + str(s_addr)
+    print 'Destination Address : ' + str(d_addr)
      
     tcp_header = packet[iph_length:iph_length+20]
     #now unpack them :)
@@ -49,23 +63,27 @@ def printPacket(packet):
     syn = (flags & 0x2) >> 1
     fin = (flags & 0x1) 
     line()
-    print "sequence" , sequence
-    print "acknowledgement",acknowledgement
-    print "flags ",hex(flags)
-    print "ack ",ack
-    print "syn ",syn
-    print "fin ",fin
-    line()
      
-    #print 'Source Port : ' + str(source_port) + ' Dest Port : ' + str(dest_port) + ' Sequence Number : ' + str(sequence) + ' Acknowledgement : ' + str(acknowledgement) + ' TCP header length : ' + str(tcph_length)
      
     h_size = iph_length + tcph_length * 4
     data_size = len(packet) - h_size
-     
-    #get data from the packet
     data = packet[h_size:]
-    #print 'Data : ' + data
-    #print
+    print "=================================="
+    print "Transport Control Protocol"
+    print "=================================="
+    print 
+    print "flags ", hex(flags)
+    print "syn: ", syn
+    print "ack: ", ack
+    print "fin: ", fin
+     
+    print 'Source Port : ' + str(src_port) 
+    print 'Dest Port : ' + str(dest_port) 
+    print 'Sequence Number : ' + str(sequence) 
+    print 'Acknowledgement : ' + str(acknowledgement) 
+    print 'TCP header length : ' + str(tcph_length)
+    print 'Data : ' + data
+    print 
     return sequence,acknowledgement,syn,ack,fin
 
 def check_md5(file_path, block_size=1460):
@@ -310,10 +328,6 @@ except socket.error , msg:
 
 
 packet = ' '
-src_ip = '127.0.0.1'
-dest_ip = '127.0.0.1'
-src_port = 1234
-dest_port = 80
 ip_header = ip_packet(src_ip,dest_ip)
 
 
