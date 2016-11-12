@@ -16,13 +16,13 @@ if len(sys.argv) < 3:
 	print '[Dest IP Addr] [Dest Port] [File Path]'
 	sys.exit()
 '''
-src_ip = '127.0.0.1'
-dest_ip = '192.168.0.2'
+local_ip = socket.gethostbyname(socket.gethostname())
+src_ip = local_ip
+dest_ip = '127.0.0.1'
 src_port = 1234
 dest_port = 80
 
-def printPacket(packet):
-    packet= packet[0]
+def packet_IP(packet):
     ip_header = packet[0:20]
     iph = unpack('!BBHHHBBH4s4s' , ip_header)
     version_ihl = iph[0]
@@ -33,19 +33,15 @@ def printPacket(packet):
     protocol = iph[6]
     s_addr = socket.inet_ntoa(iph[8]);
     d_addr = socket.inet_ntoa(iph[9]);
-    print "=================================="
-    print "Internet Protocol"
-    print "=================================="
-     
-    print 'Version : ' + str(version)
-    print 'IP Header Length : ' + str(ihl)
-    print 'TTL : ' + str(ttl)
-    print 'Protocol : ' + str(protocol)
-    print 'Source Address : ' + str(s_addr)
-    print 'Destination Address : ' + str(d_addr)
-     
+    return version, ihl,iph_length, ttl,protocol,s_addr,d_addr
+
+def printpacket(packet):
+    packet= packet[0]
+    #IP
+    version, ihl,iph_length, ttl,protocol,s_addr,d_addr = packet_IP(packet)
+    
+    #TCP
     tcp_header = packet[iph_length:iph_length+20]
-    #now unpack them :)
     tcph = unpack('!HHLLBBHHH' , tcp_header)
     source_port = tcph[0]
     dest_port = tcph[1]
@@ -64,10 +60,21 @@ def printPacket(packet):
     fin = (flags & 0x1) 
     line()
      
-     
     h_size = iph_length + tcph_length * 4
     data_size = len(packet) - h_size
     data = packet[h_size:]
+
+    print "=================================="
+    print "Internet Protocol"
+    print "=================================="
+     
+    print 'Version : ' + str(version)
+    print 'IP Header Length : ' + str(ihl)
+    print 'TTL : ' + str(ttl)
+    print 'Protocol : ' + str(protocol)
+    print 'Source Address : ' + str(s_addr)
+    print 'Destination Address : ' + str(d_addr)
+
     print "=================================="
     print "Transport Control Protocol"
     print "=================================="
@@ -98,8 +105,6 @@ def check_md5(file_path, block_size=1460):
         if not buf:
             break
         md5.update(buf)
-	#print(md5.hexdigest())
-	#md5.update(data)
     return  md5.hexdigest()
 
 def checksum(msg):
@@ -214,8 +219,11 @@ def recv_syn_ack(packet,seqNo):
         try:
             if isSYN==1 and isACK==1:
                 break
-	    Reply= recv_sock.recvfrom(buffer_size)
-	    recv_sequence,recv_ack,syn,ack,fin = printPacket(Reply)
+	    packet= recv_sock.recvfrom(buffer_size)
+            version, ihl,iph_length, ttl,protocol,s_addr,d_addr = packet_IP(packet[0])
+            if s_addr == local_ip:
+                 continue
+	    recv_sequence,recv_ack,syn,ack,fin = printpacket(packet)
             line()
             if  syn==1:
                 flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':1,'urg':0}
@@ -236,14 +244,11 @@ def recv_ack(packet,seqNo):
     line()
     while True:
         try:
-	    Reply= recv_sock.recvfrom(buffer_size)
-	    recv_sequence,recv_ack,syn,ack,fin = printPacket(Reply)
-            print "SeqNo" , seqNo
-            print "recv_sequence ",recv_sequence
-            print "recv_ack",recv_ack
-            print "ack ",ack
-            print "syn ",syn
-            print "fin ",fin
+	    packet= recv_sock.recvfrom(buffer_size)
+            version, ihl,iph_length, ttl,protocol,s_addr,d_addr = packet_IP(packet[0])
+            if s_addr == local_ip:
+                 continue
+	    recv_sequence,recv_ack,syn,ack,fin = printpacket(packet)
             if  ack == 1:
                 print "ACK receive", recv_ack
                 break
@@ -261,14 +266,11 @@ def recv_fin_ack(packet,seqNo):
         try:
             if isFIN ==1 and isACK ==1:
                 break
-	    Reply= recv_sock.recvfrom(buffer_size)
-	    recv_sequence,recv_ack,syn,ack,fin = printPacket(Reply)
-            print "SeqNo" , seqNo
-            print "recv_sequence ",recv_sequence
-            print "recv_ack",recv_ack
-            print "ack ",ack
-            print "syn ",syn
-            print "fin ",fin
+	    packet= recv_sock.recvfrom(buffer_size)
+            version, ihl,iph_length, ttl,protocol,s_addr,d_addr = packet_IP(packet[0])
+            if s_addr == local_ip:
+                 continue
+	    recv_sequence,recv_ack,syn,ack,fin = printpacket(packet)
             if fin==1:
                 flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':1,'urg':0}
                 packet = make_packet(recv_ack+1,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
@@ -288,14 +290,11 @@ def receive_data(packet,seqNo):
     print '-----------------------------------------------------------------------' 
     while True:
         try:
-	    Reply= recv_sock.recvfrom(buffer_size)
-	    recv_sequence,recv_ack,syn,ack,fin = printPacket(Reply)
-            print "SeqNo" , seqNo
-            print "recv_sequence ",recv_sequence
-            print "recv_ack",recv_ack
-            print "ack ",ack
-            print "syn ",syn
-            print "fin ",fin
+	    packet= recv_sock.recvfrom(buffer_size)
+            version, ihl,iph_length, ttl,protocol,s_addr,d_addr = packet_IP(packet[0])
+            if s_addr == local_ip:
+                 continue
+	    recv_sequence,recv_ack,syn,ack,fin = printpacket(packet)
             if  syn==1:
                 flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':1,'urg':0}
                 packet = make_packet(recv_ack+1,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
@@ -352,6 +351,7 @@ print
 
 nextSeqNo = seqNo +1
 seqNo = nextSeqNo
+'''
 
 #filePath
 data = filePath
@@ -369,7 +369,7 @@ print
 
 nextSeqNo = seqNo + 1
 seqNo = nextSeqNo
-
+'''
 '''
 #filesize
 data = str(filesize)
