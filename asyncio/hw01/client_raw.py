@@ -5,7 +5,7 @@ import os
 import time
 import threading
 
-buffer_size = 1500
+buffer_size = 1460
 filePath = sys.argv[1]
 '''
 dest_ip = sys.argv[1]
@@ -17,12 +17,18 @@ if len(sys.argv) < 3:
 	sys.exit()
 '''
 local_ip = socket.gethostbyname(socket.gethostname())
-src_ip = local_ip
+src_ip = '127.0.0.1'
 dest_ip = '127.0.0.1'
-src_port = 1234
+src_port = 6000
 dest_port = 5000
 
-def packet_IP(packet):
+def unPack_header(packet):
+    ip_dict = unPackIP_header(packet)
+    tcp_dict = unPackTCP_header(packet,ip_dict['iph_length'])
+    return ip_dict, tcp_dict
+
+def unPackIP_header(packet):
+    packet= packet[0]
     ip_header = packet[0:20]
     iph = unpack('!BBHHHBBH4s4s' , ip_header)
     version_ihl = iph[0]
@@ -31,25 +37,12 @@ def packet_IP(packet):
     iph_length = ihl * 4
     ttl = iph[5]
     protocol = iph[6]
-    s_addr = socket.inet_ntoa(iph[8]);
-    d_addr = socket.inet_ntoa(iph[9]);
-    return version, ihl,iph_length, ttl,protocol,s_addr,d_addr
+    src_ip= socket.inet_ntoa(iph[8]);
+    dest_ip= socket.inet_ntoa(iph[9]);
+    ip_dict = {'iph_length':iph_length,'version':version,'ttl':ttl,'protocol':protocol,'src_ip':src_ip,'dest_ip':dest_ip}
+    return ip_dict
 
-def printpacket(packet):
-    packet= packet[0]
-    #IP
-    version, ihl,iph_length, ttl,protocol,s_addr,d_addr = packet_IP(packet)
-    
-    #TCP
-    tcp_header = packet[iph_length:iph_length+20]
-    tcph = unpack('!HHLLBBHHH' , tcp_header)
-    source_port = tcph[0]
-    dest_port = tcph[1]
-    sequence = tcph[2]
-    acknowledgement = tcph[3]
-    doff_reserved = tcph[4]
-    tcph_length = doff_reserved >> 4
-    flags = tcph[5]
+def getFlagDict(flags):
     cwr = (flags & 0x80) >> 7
     ece = (flags & 0x40) >> 6
     urg = (flags & 0x20) >> 5
@@ -58,40 +51,64 @@ def printpacket(packet):
     rst = (flags & 0x4) >> 2
     syn = (flags & 0x2) >> 1
     fin = (flags & 0x1) 
-    line()
-     
-    h_size = iph_length + tcph_length * 4
-    data_size = len(packet) - h_size
-    data = packet[h_size:]
+    flag_dict = {'cwr':cwr,'ece':ece,'urg':urg,'ack':ack,'psh':psh,'rst':rst,'syn':syn,'fin':fin}
+    return flag_dict
 
+def unPackTCP_header(packet,iph_length):
+    packet= packet[0]
+    tcp_header = packet[iph_length:iph_length+20]
+    tcp_hdr = unpack('!HHLLBBHHH' , tcp_header)
+     
+    src_port = tcp_hdr[0]
+    dest_port = tcp_hdr[1]
+    sequence = tcp_hdr[2]
+    acknowledgement = tcp_hdr[3]
+    doff_reserved = tcp_hdr[4]
+    tcp_hdr_length = doff_reserved >> 4
+    flags = tcp_hdr[5]
+
+    h_size = iph_length + tcp_hdr_length * 4
+    data_size = len(packet) - h_size
+     
+    #get data from the packet
+    data = packet[h_size:]
+    tcp_dict = {'src_port':src_port,'dest_port':dest_port,'sequence':sequence,'acknowledgement':acknowledgement,'tcp_hdr_length':tcp_hdr_length,'flags':flags,'data':data}
+    return tcp_dict
+
+def printIPHeader(ip_dict):
+    line()
     print "=================================="
     print "Internet Protocol"
     print "=================================="
      
-    print 'Version : ' + str(version)
-    print 'IP Header Length : ' + str(ihl)
-    print 'TTL : ' + str(ttl)
-    print 'Protocol : ' + str(protocol)
-    print 'Source Address : ' + str(s_addr)
-    print 'Destination Address : ' + str(d_addr)
+    print 'Version : ' + str(ip_dict['version'])
+    print 'IP Header Length : ' + str(ip_dict['iph_length'])
+    print 'TTL : ' + str(ip_dict['ttl'])
+    print 'Protocol : ' + str(ip_dict['protocol'])
+    print 'Source Address : ' +str(ip_dict['src_ip']) 
+    print 'Destination Address : ' +str(ip_dict['dest_ip']) 
 
+
+def printTCPHeader(tcp_dict):
     print "=================================="
     print "Transport Control Protocol"
     print "=================================="
     print 
-    print "flags ", hex(flags)
-    print "syn: ", syn
-    print "ack: ", ack
-    print "fin: ", fin
      
-    print 'Source Port : ' + str(src_port) 
-    print 'Dest Port : ' + str(dest_port) 
-    print 'Sequence Number : ' + str(sequence) 
-    print 'Acknowledgement : ' + str(acknowledgement) 
-    print 'TCP header length : ' + str(tcph_length)
-    print 'Data : ' + data
-    print 
-    return sequence,acknowledgement,syn,ack,fin
+    print 'Source Port : ',tcp_dict['src_port']
+    print 'Dest Port : ', tcp_dict['dest_port']
+    print 'Sequence Number : ',tcp_dict['sequence']
+    print 'Acknowledgement : ',tcp_dict['acknowledgement']
+    print 'TCP header length : ',tcp_dict['tcp_hdr_length']
+    flags = tcp_dict['flags']
+    print "flags ", hex(flags)
+    flag_dict = getFlagDict(flags)
+    print "syn: ", flag_dict['syn']
+    print "ack: ", flag_dict['ack']
+    print "fin: ", flag_dict['fin']
+    print 'Data : ' + tcp_dict['data']
+    line()
+    print
 
 def check_md5(file_path, block_size=1460):
     md5 = hashlib.md5()
@@ -163,12 +180,12 @@ def make_tcp_checksum(src_ip,dest_ip,tmp_hdr,data):
         #tcp_checksum= checksum(tmp)
 	return tcp_checksum
 
-def tcp_packet(seqNo,src_port,dest_port,src_ip,dest_ip,data,falgs):
+def tcp_packet(seqNo,ackNo,src_port,dest_port,src_ip,dest_ip,data,falgs):
 
         tcp_src_port = src_port
         tcp_dest_port = dest_port
         tcp_seq = seqNo
-        tcp_ack_seq = seqNo+1
+        tcp_ack_seq = ackNo
         tcp_offset = 5
         fin = flags['fin']
         syn = flags['syn']
@@ -193,125 +210,146 @@ def tcp_packet(seqNo,src_port,dest_port,src_ip,dest_ip,data,falgs):
 def line():
     print '-----------------------------------------------------------------------' 
 
-def make_packet(seqNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header):
-    tcp_header = tcp_packet(seqNo, src_port,dest_port,src_ip,dest_ip, data,flags)
+def make_packet(seqNo,ackNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header):
+    tcp_header = tcp_packet(seqNo,ackNo, src_port,dest_port,src_ip,dest_ip, data,flags)
     return ip_header + tcp_header + data
 
 
 
-def syncronization(packet,seqNo):
+def syncronization(packet):
     sock.sendto(packet,(dest_ip, dest_port))
-    recv_syn_ack(packet,seqNo)
+    print "[Send SYN]"
+    sequence, acknowledgement = recv_syn_ack()
+    return sequence,acknowledgement
 
-def finalization(packet,serNo):
+def finalization(packet):
     sock.sendto(packet,(dest_ip, dest_port))
-    recv_fin_ack(packet,seqNo)
+    sequence , acknowledgement = recv_fin_ack()
+    return sequence,acknowledgement
 
-def send_Data(packet,seqNo):
-    sock.sendto(packet,(dest_ip, dest_port))
-    #threading.Thread(target = recv_ack, args=(sock)).start()
 
-def recv_syn_ack(packet,seqNo):
+
+def sendACK(ip_dict,tcp_dict):
+    print "[Send ACK]"
+    flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':1,'urg':0}
+    sequence = tcp_dict['sequence'] 
+    recvSeq = tcp_dict['acknowledgement']
+    ackSeq  = sequence + 1
+    src_port = tcp_dict['dest_port']
+    dest_port = tcp_dict['src_port']
+    src_ip = ip_dict['dest_ip']
+    dest_ip = ip_dict['src_ip']
+    data = ''
+    ip_header = ip_packet(src_ip,dest_ip) 
+
+    packet = make_packet(recvSeq,ackSeq,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
+    sock.sendto(packet, (dest_ip,dest_port))
+
+
+def recv_syn_ack():
     line()
     isSYN=0
     isACK=0
+    sequence = 0
+    acknowledgement=0
     while True:
         try:
             if isSYN==1 and isACK==1:
                 break
+
 	    packet= recv_sock.recvfrom(buffer_size)
-            '''
-            version, ihl,iph_length, ttl,protocol,s_addr,d_addr = packet_IP(packet[0])
-            if s_addr == local_ip:
-                 continue
-            '''
-	    recv_sequence,recv_ack,syn,ack,fin = printpacket(packet)
+            ip_dict,tcp_dict = unPack_header(packet)    
+            if tcp_dict['dest_port'] != src_port:
+                  continue
+
+            printIPHeader(ip_dict)
+            printTCPHeader(tcp_dict)
+            flags = tcp_dict['flags']
+            flag_dict= getFlagDict(flags)
+            syn = flag_dict['syn']
+            ack = flag_dict['ack']
+            sequence=  tcp_dict['sequence']
+            acknowledgement =  tcp_dict['acknowledgement']
+
             line()
             if  syn==1:
-                flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':1,'urg':0}
-                packet = make_packet(recv_ack+1,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
-                send_Data(packet,recv_ack)
-                print "SYN receive", recv_ack
+                print "SYN receive"
+                sendACK(ip_dict,tcp_dict)
                 isSYN=1
             elif  ack == 1:
-                print "ACK receive", recv_ack
+                print "ACK receive"
                 isACK=1
             line()
         except socket.timeout:
-              print "time out, resend! seq No:",seqNo
+              print "time out, resend! seq No :", sequence
               sock.sendto(packet,(dest_ip, dest_port))
     line()
+    return sequence,acknowledgement
 
-def recv_ack(packet,seqNo):
+def recv_ack():
+    sequence=0
+    acknowledgement=0
     line()
     while True:
         try:
 	    packet= recv_sock.recvfrom(buffer_size)
-            version, ihl,iph_length, ttl,protocol,s_addr,d_addr = packet_IP(packet[0])
-            if s_addr == local_ip:
-                 continue
-	    recv_sequence,recv_ack,syn,ack,fin = printpacket(packet)
+            ip_dict,tcp_dict = unPack_header(packet)    
+            if tcp_dict['dest_port'] != src_port:
+                  continue
+            printIPHeader(ip_dict)
+            printTCPHeader(tcp_dict)
+            flags = tcp_dict['flags']
+            flag_dict= getFlagDict(flags)
+            ack= flag_dict['ack']
+            sequence = tcp_dict['sequence']
+            acknowledgement= tcp_dict['acknowledgement']
+
             if  ack == 1:
-                print "ACK receive", recv_ack
+                print "ACK receive"
                 break
         except socket.timeout:
-              print "time out, resend! seq No:",seqNo
+              print "time out, resend! seq No:", sequence
               sock.sendto(packet,(dest_ip, dest_port))
     line()
+    return sequence, acknowledgement
 
 
-def recv_fin_ack(packet,seqNo):
+def recv_fin_ack():
     line()
     isFIN=0
     isACK=0
+    sequence=0
+    acknowledgement=0
     while True:
         try:
             if isFIN ==1 and isACK ==1:
                 break
 	    packet= recv_sock.recvfrom(buffer_size)
-	    recv_sequence,recv_ack,syn,ack,fin = printpacket(packet)
+            ip_dict,tcp_dict = unPack_header(packet)    
+            if tcp_dict['dest_port'] != src_port:
+                  continue
+            printIPHeader(ip_dict)
+            printTCPHeader(tcp_dict)
+            flags = tcp_dict['flags']
+            flag_dict= getFlagDict(flags)
+            ack= flag_dict['ack']
+            fin= flag_dict['fin']
+            sequence= tcp_dict['sequence']
+            acknowledgement = tcp_dict['acknowledgement']
+
             if fin==1:
-                flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':1,'urg':0}
-                packet = make_packet(recv_ack+1,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
-                send_Data(packet,recv_ack)
-                print "FIN receive", recv_ack
+                print "FIN receive", acknowledgement
+                sendACK(ip_dict,tcp_dict)
                 isFIN=1
             elif  ack == 1:
-                print "ACK receive", recv_ack
+                print "ACK receive", acknowledgement
                 isACK=1
         except socket.timeout:
-              print "time out, resend! seq No:",seqNo
+              print "time out, resend! seq No:", acknowledgement
               sock.sendto(packet,(dest_ip, dest_port))
     line()
+    return sequence,acknowledgement
  
-
-def receive_data(packet,seqNo):
-    print '-----------------------------------------------------------------------' 
-    while True:
-        try:
-	    packet= recv_sock.recvfrom(buffer_size)
-	    recv_sequence,recv_ack,syn,ack,fin = printpacket(packet)
-            if  syn==1:
-                flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':1,'urg':0}
-                packet = make_packet(recv_ack+1,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
-                send_Data(packet,recv_ack)
-                print "SYN receive", recv_ack
-                break
-            elif fin==1:
-                flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':1,'urg':0}
-                packet = make_packet(recv_ack+1,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
-                send_Data(packet,recv_ack)
-                print "FIN receive", recv_ack
-                break
-            elif  ack == 1:
-                print "ACK receive", recv_ack
-                break
-            else:
-                print "NAK receive",seqNo
-        except socket.timeout:
-              print "time out, resend! seq No:",seqNo
-              sock.sendto(packet,(dest_ip, dest_port))
-    print '-----------------------------------------------------------------------' 
 
 try:
     sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
@@ -334,20 +372,22 @@ if maximumSeqSize < DataSize:
     raise Exception("OverSizeException")
 print "Data size is ", DataSize
 
-seqNo=0
 print "#################################################################"
 print "syncronization"
 print "#################################################################"
 print
+
+seqNo=0
+nextSeqNo = seqNo +30
 data = ''
 flags  = {'fin':0,'syn':1,'rst':0,'psh':0,'ack':0,'urg':0}
-packet = make_packet(seqNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
-syncronization(packet,seqNo)
+packet = make_packet(seqNo,nextSeqNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
+sequence,acknowledgement = syncronization(packet)
 print
 
-nextSeqNo = seqNo +1
-seqNo = nextSeqNo
 '''
+seqNo = acknowledgement
+nextSeqNo = sequence+1
 
 #filePath
 data = filePath
@@ -357,16 +397,17 @@ print "FileName : ", filePath
 print "#################################################################"
 print
 flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':0,'urg':0}
-packet = make_packet(seqNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
-send_Data(packet,seqNo)
-recv_ack(packet,seqNo)
+packet = make_packet(seqNo,nextSeqNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
+sock.sendto(packet,(dest_ip, dest_port))
+sequence, acknowledgement = recv_ack()
 print
 
 
-nextSeqNo = seqNo + 1
-seqNo = nextSeqNo
 '''
 '''
+seqNo = acknowledgement
+nextSeqNo = sequence+1
+
 #filesize
 data = str(filesize)
 print "#################################################################"
@@ -376,23 +417,26 @@ print "#################################################################"
 print 
 nextSeqNo=  seqNo +len(data)
 flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':0,'urg':0}
-packet = make_packet(seqNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
-send_Data(packet,seqNo)
+packet = make_packet(seqNo,nextSeqNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
+sock.sendto(packet,(dest_ip, dest_port))
+sequence, acknowledgement = recv_ack()
 print
 
-nextSeqNo = seqNo + len(data)
-seqNo = nextSeqNo
 '''
 
 
-
+print "sequence---- ",sequence
+print "acknowledgement -- ", acknowledgement
+seqNo = acknowledgement
+nextSeqNo = sequence+1
 print "#################################################################"
 print "finalization"
 print "#################################################################"
 print
+print "[Send FIN]"
 data = ''
 flags  = {'fin':1,'syn':0,'rst':0,'psh':0,'ack':0,'urg':0}
-packet = make_packet(seqNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
-finalization(packet,seqNo)
+packet = make_packet(seqNo,nextSeqNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
+sequence , acknowledgement = finalization(packet)
 print
 

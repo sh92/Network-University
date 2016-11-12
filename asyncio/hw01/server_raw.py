@@ -4,10 +4,11 @@ import hashlib
 import os
 import time
 
-buffer_size = 1500
+buffer_size = 1460
 RAW_IP = ''
 RAW_PORT = 5000
 sock= socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
+send_sock=socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
 sock.bind((RAW_IP,RAW_PORT)) 
 print "ready for client ... "
 
@@ -187,7 +188,7 @@ def printTCPHeader(tcp_dict):
 def line():
     print '-----------------------------------------------------------------------' 
 def arrow_line():
-    print '>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>'
+    print '>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>'
 
 def syncronization():
     recv_syn()
@@ -200,23 +201,30 @@ def finalization():
 def sendSYN(ip_dict,tcp_dict):
     flags  = {'fin':0,'syn':1,'rst':0,'psh':0,'ack':0,'urg':0}
     sequence = tcp_dict['sequence']
-    ackSeq  = sequence + 1
-    recvSeq = sequence + 10
+    recvSeq = tcp_dict['acknowledgement'] 
+    ackSeq  = sequence+1
+ 
+    print "[[[ acknowledgement",ackSeq
+    print "[[[ sequence", recvSeq
+ 
     src_port = tcp_dict['dest_port']
     dest_port = tcp_dict['src_port']
     src_ip = ip_dict['dest_ip']
     dest_ip = ip_dict['src_ip']
+    print '[[src_port', src_port
+    print '[[dest port', dest_port
+
     ip_header = ip_packet(src_ip,dest_ip) 
 
     packet = make_packet(recvSeq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header)
-    sock.sendto(packet, (dest_ip,dest_port))
+    send_sock.sendto(packet, (dest_ip,dest_port))
 
 
 def sendFIN(ip_dict,tcp_dict):
     flags  = {'fin':1,'syn':0,'rst':0,'psh':0,'ack':0,'urg':0}
     sequence = tcp_dict['sequence']
-    ackSeq  = sequence + 1
-    recvSeq = sequence + 10
+    ackSeq  = sequence+1
+    recvSeq = tcp_dict['acknowledgement'] 
     src_port = tcp_dict['dest_port']
     dest_port = tcp_dict['src_port']
     src_ip = ip_dict['dest_ip']
@@ -224,14 +232,14 @@ def sendFIN(ip_dict,tcp_dict):
     ip_header = ip_packet(src_ip,dest_ip) 
 
     packet = make_packet(recvSeq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header)
-    sock.sendto(packet, (dest_ip,dest_port))
+    send_sock.sendto(packet, (dest_ip,dest_port))
 
 
 def sendACK(ip_dict,tcp_dict):
     flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':1,'urg':0}
     sequence = tcp_dict['sequence']
-    ackSeq  = sequence + 1
-    recvSeq = sequence + 10
+    ackSeq  = sequence+1
+    recvSeq = tcp_dict['acknowledgement'] 
     src_port = tcp_dict['dest_port']
     dest_port = tcp_dict['src_port']
     src_ip = ip_dict['dest_ip']
@@ -239,7 +247,7 @@ def sendACK(ip_dict,tcp_dict):
     ip_header = ip_packet(src_ip,dest_ip) 
 
     packet = make_packet(recvSeq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header)
-    sock.sendto(packet, (dest_ip,dest_port))
+    send_sock.sendto(packet, (dest_ip,dest_port))
 
 
 
@@ -257,7 +265,6 @@ def recv_fin():
               flags = tcp_dict['flags']
               flag_dict= getFlagDict(flags)
               fin  = flag_dict['fin']
-              print 'fin is ', fin
               if fin ==1: 
                    print "[Receive FIN]"
                    print "Send ACK"
@@ -284,7 +291,6 @@ def recv_syn():
               flags = tcp_dict['flags']
               flag_dict= getFlagDict(flags)
               syn = flag_dict['syn']
-              print "syn is ", syn
               if syn==1:
                    print "[Receive SYN]"
                    print '[Send ACK]'
@@ -310,7 +316,6 @@ def recv_ack():
             flags = tcp_dict['flags']
             flag_dict= getFlagDict(flags)
             ack = flag_dict['ack']
-            print 'ack is ',ack
             if ack == 1:
                 print "[Receive ACK]", tcp_dict['sequence']
                 break
