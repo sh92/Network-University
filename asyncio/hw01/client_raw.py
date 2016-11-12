@@ -20,7 +20,7 @@ local_ip = socket.gethostbyname(socket.gethostname())
 src_ip = local_ip
 dest_ip = '127.0.0.1'
 src_port = 1234
-dest_port = 80
+dest_port = 5000
 
 def packet_IP(packet):
     ip_header = packet[0:20]
@@ -200,15 +200,15 @@ def make_packet(seqNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header):
 
 
 def syncronization(packet,seqNo):
-    sock.sendto(packet,(dest_ip, 0))
+    sock.sendto(packet,(dest_ip, dest_port))
     recv_syn_ack(packet,seqNo)
 
 def finalization(packet,serNo):
-    sock.sendto(packet,(dest_ip, 0))
+    sock.sendto(packet,(dest_ip, dest_port))
     recv_fin_ack(packet,seqNo)
 
 def send_Data(packet,seqNo):
-    sock.sendto(packet,(dest_ip, 0))
+    sock.sendto(packet,(dest_ip, dest_port))
     #threading.Thread(target = recv_ack, args=(sock)).start()
 
 def recv_syn_ack(packet,seqNo):
@@ -220,9 +220,11 @@ def recv_syn_ack(packet,seqNo):
             if isSYN==1 and isACK==1:
                 break
 	    packet= recv_sock.recvfrom(buffer_size)
+            '''
             version, ihl,iph_length, ttl,protocol,s_addr,d_addr = packet_IP(packet[0])
             if s_addr == local_ip:
                  continue
+            '''
 	    recv_sequence,recv_ack,syn,ack,fin = printpacket(packet)
             line()
             if  syn==1:
@@ -237,7 +239,7 @@ def recv_syn_ack(packet,seqNo):
             line()
         except socket.timeout:
               print "time out, resend! seq No:",seqNo
-              sock.sendto(packet,(dest_ip, 0))
+              sock.sendto(packet,(dest_ip, dest_port))
     line()
 
 def recv_ack(packet,seqNo):
@@ -254,7 +256,7 @@ def recv_ack(packet,seqNo):
                 break
         except socket.timeout:
               print "time out, resend! seq No:",seqNo
-              sock.sendto(packet,(dest_ip, 0))
+              sock.sendto(packet,(dest_ip, dest_port))
     line()
 
 
@@ -267,9 +269,6 @@ def recv_fin_ack(packet,seqNo):
             if isFIN ==1 and isACK ==1:
                 break
 	    packet= recv_sock.recvfrom(buffer_size)
-            version, ihl,iph_length, ttl,protocol,s_addr,d_addr = packet_IP(packet[0])
-            if s_addr == local_ip:
-                 continue
 	    recv_sequence,recv_ack,syn,ack,fin = printpacket(packet)
             if fin==1:
                 flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':1,'urg':0}
@@ -282,7 +281,7 @@ def recv_fin_ack(packet,seqNo):
                 isACK=1
         except socket.timeout:
               print "time out, resend! seq No:",seqNo
-              sock.sendto(packet,(dest_ip, 0))
+              sock.sendto(packet,(dest_ip, dest_port))
     line()
  
 
@@ -291,9 +290,6 @@ def receive_data(packet,seqNo):
     while True:
         try:
 	    packet= recv_sock.recvfrom(buffer_size)
-            version, ihl,iph_length, ttl,protocol,s_addr,d_addr = packet_IP(packet[0])
-            if s_addr == local_ip:
-                 continue
 	    recv_sequence,recv_ack,syn,ack,fin = printpacket(packet)
             if  syn==1:
                 flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':1,'urg':0}
@@ -314,7 +310,7 @@ def receive_data(packet,seqNo):
                 print "NAK receive",seqNo
         except socket.timeout:
               print "time out, resend! seq No:",seqNo
-              sock.sendto(packet,(dest_ip, 0))
+              sock.sendto(packet,(dest_ip, dest_port))
     print '-----------------------------------------------------------------------' 
 
 try:

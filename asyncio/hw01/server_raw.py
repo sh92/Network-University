@@ -5,6 +5,11 @@ import os
 import time
 
 buffer_size = 1500
+RAW_IP = ''
+RAW_PORT = 5000
+sock= socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
+sock.bind((RAW_IP,RAW_PORT)) 
+print "ready for client ... "
 
 def getChecksum(data):
     sum=0
@@ -90,7 +95,13 @@ def verifyChecksum(data, checksum):
     else:
         return False
 
-def printPacket(packet):
+
+def unPack_header(packet):
+    ip_dict = unPackIP_header(packet)
+    tcp_dict = unPackTCP_header(packet,ip_dict['iph_length'])
+    return ip_dict, tcp_dict
+
+def unPackIP_header(packet):
     packet= packet[0]
     ip_header = packet[0:20]
     iph = unpack('!BBHHHBBH4s4s' , ip_header)
@@ -100,24 +111,26 @@ def printPacket(packet):
     iph_length = ihl * 4
     ttl = iph[5]
     protocol = iph[6]
-    s_addr = socket.inet_ntoa(iph[8]);
-    d_addr = socket.inet_ntoa(iph[9]);
+    src_ip= socket.inet_ntoa(iph[8]);
+    dest_ip= socket.inet_ntoa(iph[9]);
+    ip_dict = {'iph_length':iph_length,'version':version,'ttl':ttl,'protocol':protocol,'src_ip':src_ip,'dest_ip':dest_ip}
+    return ip_dict
 
-    line()
-    print "=================================="
-    print "Internet Protocol"
-    print "=================================="
-     
-    print 'Version : ' + str(version)
-    print 'IP Header Length : ' + str(ihl)
-    print 'TTL : ' + str(ttl)
-    print 'Protocol : ' + str(protocol)
-    print 'Source Address : ' + str(s_addr)
-    print 'Destination Address : ' + str(d_addr)
-     
+def getFlagDict(flags):
+    cwr = (flags & 0x80) >> 7
+    ece = (flags & 0x40) >> 6
+    urg = (flags & 0x20) >> 5
+    ack = (flags & 0x10) >> 4
+    psh = (flags & 0x8) >> 3
+    rst = (flags & 0x4) >> 2
+    syn = (flags & 0x2) >> 1
+    fin = (flags & 0x1) 
+    flag_dict = {'cwr':cwr,'ece':ece,'urg':urg,'ack':ack,'psh':psh,'rst':rst,'syn':syn,'fin':fin}
+    return flag_dict
+
+def unPackTCP_header(packet,iph_length):
+    packet= packet[0]
     tcp_header = packet[iph_length:iph_length+20]
-     
-    #now unpack them :)
     tcp_hdr = unpack('!HHLLBBHHH' , tcp_header)
      
     src_port = tcp_hdr[0]
@@ -127,39 +140,49 @@ def printPacket(packet):
     doff_reserved = tcp_hdr[4]
     tcp_hdr_length = doff_reserved >> 4
     flags = tcp_hdr[5]
-    cwr = (flags & 0x80) >> 7
-    ece = (flags & 0x40) >> 6
-    urg = (flags & 0x20) >> 5
-    ack = (flags & 0x10) >> 4
-    psh = (flags & 0x8) >> 3
-    rst = (flags & 0x4) >> 2
-    syn = (flags & 0x2) >> 1
-    fin = (flags & 0x1) 
 
-    print "=================================="
-    print "Transport Control Protocol"
-    print "=================================="
-    print 
-    print "flags ", hex(flags)
-    print "syn: ", syn
-    print "ack: ", ack
-    print "fin: ", fin
-     
-    print 'Source Port : ' + str(src_port) 
-    print 'Dest Port : ' + str(dest_port) 
-    print 'Sequence Number : ' + str(sequence) 
-    print 'Acknowledgement : ' + str(acknowledgement) 
-    print 'TCP header length : ' + str(tcp_hdr_length)
-     
     h_size = iph_length + tcp_hdr_length * 4
     data_size = len(packet) - h_size
      
     #get data from the packet
     data = packet[h_size:]
-    print 'Data : ' + data
+    tcp_dict = {'src_port':src_port,'dest_port':dest_port,'sequence':sequence,'acknowledgement':acknowledgement,'tcp_hdr_length':tcp_hdr_length,'flags':flags,'data':data}
+    return tcp_dict
+
+def printIPHeader(ip_dict):
+    line()
+    print "=================================="
+    print "Internet Protocol"
+    print "=================================="
+     
+    print 'Version : ' + str(ip_dict['version'])
+    print 'IP Header Length : ' + str(ip_dict['iph_length'])
+    print 'TTL : ' + str(ip_dict['ttl'])
+    print 'Protocol : ' + str(ip_dict['protocol'])
+    print 'Source Address : ' +str(ip_dict['src_ip']) 
+    print 'Destination Address : ' +str(ip_dict['dest_ip']) 
+
+
+def printTCPHeader(tcp_dict):
+    print "=================================="
+    print "Transport Control Protocol"
+    print "=================================="
+    print 
+     
+    print 'Source Port : ',tcp_dict['src_port']
+    print 'Dest Port : ', tcp_dict['dest_port']
+    print 'Sequence Number : ',tcp_dict['sequence']
+    print 'Acknowledgement : ',tcp_dict['acknowledgement']
+    print 'TCP header length : ',tcp_dict['tcp_hdr_length']
+    flags = tcp_dict['flags']
+    print "flags ", hex(flags)
+    flag_dict = getFlagDict(flags)
+    print "syn: ", flag_dict['syn']
+    print "ack: ", flag_dict['ack']
+    print "fin: ", flag_dict['fin']
+    print 'Data : ' + tcp_dict['data']
     line()
     print
-    return sequence,acknowledgement,data, s_addr, d_addr, src_port,dest_port,ip_header,syn,ack,fin
 
 def line():
     print '-----------------------------------------------------------------------' 
@@ -174,6 +197,51 @@ def finalization():
     recv_fin()
     recv_ack()
 
+def sendSYN(ip_dict,tcp_dict):
+    flags  = {'fin':0,'syn':1,'rst':0,'psh':0,'ack':0,'urg':0}
+    sequence = tcp_dict['sequence']
+    ackSeq  = sequence + 1
+    recvSeq = sequence + 10
+    src_port = tcp_dict['dest_port']
+    dest_port = tcp_dict['src_port']
+    src_ip = ip_dict['dest_ip']
+    dest_ip = ip_dict['src_ip']
+    ip_header = ip_packet(src_ip,dest_ip) 
+
+    packet = make_packet(recvSeq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header)
+    sock.sendto(packet, (dest_ip,dest_port))
+
+
+def sendFIN(ip_dict,tcp_dict):
+    flags  = {'fin':1,'syn':0,'rst':0,'psh':0,'ack':0,'urg':0}
+    sequence = tcp_dict['sequence']
+    ackSeq  = sequence + 1
+    recvSeq = sequence + 10
+    src_port = tcp_dict['dest_port']
+    dest_port = tcp_dict['src_port']
+    src_ip = ip_dict['dest_ip']
+    dest_ip = ip_dict['src_ip']
+    ip_header = ip_packet(src_ip,dest_ip) 
+
+    packet = make_packet(recvSeq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header)
+    sock.sendto(packet, (dest_ip,dest_port))
+
+
+def sendACK(ip_dict,tcp_dict):
+    flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':1,'urg':0}
+    sequence = tcp_dict['sequence']
+    ackSeq  = sequence + 1
+    recvSeq = sequence + 10
+    src_port = tcp_dict['dest_port']
+    dest_port = tcp_dict['src_port']
+    src_ip = ip_dict['dest_ip']
+    dest_ip = ip_dict['src_ip']
+    ip_header = ip_packet(src_ip,dest_ip) 
+
+    packet = make_packet(recvSeq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header)
+    sock.sendto(packet, (dest_ip,dest_port))
+
+
 
 def recv_fin():
     arrow_line()
@@ -181,22 +249,22 @@ def recv_fin():
     while True:
          try:
               packet= sock.recvfrom(buffer_size)
-	      recvSeq,ackSeq,data,src_ip, dest_ip, src_port,dest_port,ip_header, syn, ack, fin= printPacket(packet)
-              if fin==1 :
+              ip_dict , tcp_dict= unPack_header(packet)
+              if tcp_dict['dest_port'] != RAW_PORT:
+                  continue
+              printIPHeader(ip_dict)
+              printTCPHeader(tcp_dict)
+              flags = tcp_dict['flags']
+              flag_dict= getFlagDict(flags)
+              fin  = flag_dict['fin']
+              print 'fin is ', fin
+              if fin ==1: 
                    print "[Receive FIN]"
-                   print
-                   print "send ACK"
-                   ackSeq  =  recvSeq + 1
-                   flags = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':1,'urg':0}
-                   packet = make_packet(recvSeq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header)
-                   sock.sendto(packet,(dest_ip,dest_port))
-
+                   print "Send ACK"
+                   sendACK(ip_dict,tcp_dict)
 
                    print "[Send FIN]"
-                   recvSeq = recvSeq + 10
-                   flags = {'fin':1,'syn':0,'rst':0,'psh':0,'ack':0,'urg':0}
-                   packet = make_packet(recvSeq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header)
-                   sock.sendto(packet,(dest_ip,dest_port))
+                   sendFIN(ip_dict,tcp_dict)
                    break
          except socket.timeout:
               print "retransmit NAK packet"
@@ -208,22 +276,21 @@ def recv_syn():
     while True:
          try:
               packet= sock.recvfrom(buffer_size)
-	      recvSeq,ackSeq,data,src_ip, dest_ip, src_port,dest_port,ip_header, syn, ack, fin= printPacket(packet)
-              if syn==1 :
+              ip_dict , tcp_dict= unPack_header(packet)
+              if tcp_dict['dest_port'] != RAW_PORT:
+                  continue
+              printIPHeader(ip_dict)
+              printTCPHeader(tcp_dict)
+              flags = tcp_dict['flags']
+              flag_dict= getFlagDict(flags)
+              syn = flag_dict['syn']
+              print "syn is ", syn
+              if syn==1:
                    print "[Receive SYN]"
-                   print
-
                    print '[Send ACK]'
-                   flags = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':1,'urg':0}
-                   ackSeq  =  recvSeq + 1
-                   packet = make_packet(recvSeq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header)
-                   sock.sendto(packet,(dest_ip,dest_port))
-
+                   sendACK(ip_dict,tcp_dict)
                    print '[Send SYN]'
-                   recvSeq = recvSeq + 10
-                   flags = {'fin':0,'syn':1,'rst':0,'psh':0,'ack':0,'urg':0}
-                   packet = make_packet(recvSeq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header)
-                   sock.sendto(packet,(dest_ip,dest_port))
+                   sendSYN(ip_dict,tcp_dict)
                    break
          except socket.timeout:
               print "retransmit NAK packet"
@@ -235,40 +302,53 @@ def recv_ack():
     while True:
         try:
             packet= sock.recvfrom(buffer_size)
-	    recvSeq,ackSeq,data,src_ip, dest_ip, src_port,dest_port,ip_header, syn, ack, fin= printPacket(packet)
-            if  ack == 1:
-                print "[Receive ACK]", recvSeq
+            ip_dict , tcp_dict= unPack_header(packet)
+            if tcp_dict['dest_port'] != RAW_PORT:
+                continue
+            printIPHeader(ip_dict)
+            printTCPHeader(tcp_dict)
+            flags = tcp_dict['flags']
+            flag_dict= getFlagDict(flags)
+            ack = flag_dict['ack']
+            print 'ack is ',ack
+            if ack == 1:
+                print "[Receive ACK]", tcp_dict['sequence']
                 break
         except socket.timeout:
-              print "time out, resend! seq No:",seqNo
+              print "time out, resend! seq No:", stcp_dict['sequence']
+
 
 def receiveData():
     line()
-    try:
-        packet= sock.recvfrom(buffer_size)
-        recvSeq,ackSeq,data,src_ip, dest_ip, src_port,dest_port,ip_header, syn, ack, fin= printPacket(packet)
-        print "send ACK"
-        flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':1,'urg':0}
-        ackSeq  =  recvSeq + 1
-        recvSeq = recvSeq + 10
-        packet = make_packet(recvSeq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header)
-        sock.sendto(packet, (dest_ip,dest_port))
-        print
-    except socket.timeout:
-        print "retransmit NAK packet"
+    while True:
+        try:
+            packet= sock.recvfrom(buffer_size)
+            ip_dict , tcp_dict= unPack_header(packet)
+            if tcp_dict['dest_port'] != RAW_PORT:
+                continue
+            printIPHeader(ip_dict)
+            printTCPHeader(tcp_dict)
+            flags = tcp_dict['flags']
+            flag_dict= getFlagDict(flags)
+            print "send ACK"
+            sendACK(ip_dict,tcp_dict)
+            print
+            break
+        except socket.timeout:
+            print "retransmit NAK packet"
     line()
-    recv_ack()
+    recv_Packet()
     return data 
-
+'''
 try:
     sock= socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
-    #sock.bind((ServerIP,ServerPort)) 
+    sock.bind((RAW_IP,RAW_PORT)) 
     #sock.settimeout(0.1)
     print "ready for client ... "
 except socket.error , msg:
     print "Scoket could not be creadted. Erorr Code : " + str(msg[0]) + ' Message ' +msg[1]
     sys.exit()
-
+'''
 
 print "############################################################"
 print"Syncronization"
