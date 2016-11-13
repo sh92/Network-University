@@ -5,7 +5,8 @@ import os
 import time
 import threading
 
-buffer_size = 1460
+buffer_size = 1500
+client_mss_size =  500
 filePath = sys.argv[1]
 '''
 dest_ip = sys.argv[1]
@@ -69,10 +70,18 @@ def unPackTCP_header(packet,iph_length):
 
     h_size = iph_length + tcp_hdr_length * 4
     data_size = len(packet) - h_size
+    mss=0
+    if tcp_hdr_length > 5: 
+        print 'mss ok'
+        option_pack = packet[iph_length + 20: h_size] 
+        option_hdr = unpack('!BBH',option_pack)
+        option_type = option_hdr[0]
+        if option_type == 2:
+            mss = option_hdr[2]
      
     #get data from the packet
     data = packet[h_size:]
-    tcp_dict = {'src_port':src_port,'dest_port':dest_port,'sequence':sequence,'acknowledgement':acknowledgement,'tcp_hdr_length':tcp_hdr_length,'flags':flags,'data':data}
+    tcp_dict = {'src_port':src_port,'dest_port':dest_port,'sequence':sequence,'acknowledgement':acknowledgement,'tcp_hdr_length':tcp_hdr_length,'flags':flags,'data':data, 'mss':mss} 
     return tcp_dict
 
 def printIPHeader(ip_dict):
@@ -217,7 +226,9 @@ def make_packet(seqNo,ackNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_head
 def make_mssPack():
     mss_type=2
     mss_length=4
-    mss_value=buffer_size
+    mss_value=client_mss_size
+    mss_pack= pack('!BBH',mss_type,mss_length,mss_value)
+    return mss_pack
 
 def make_packet_with_mss(seqNo,ackNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header):
     use_mss=1
@@ -261,6 +272,7 @@ def recv_syn_ack():
     isACK=0
     sequence = 0
     acknowledgement=0
+    global buffer_size
     while True:
         try:
             if isSYN==1 and isACK==1:
@@ -279,12 +291,19 @@ def recv_syn_ack():
             ack = flag_dict['ack']
             sequence=  tcp_dict['sequence']
             acknowledgement =  tcp_dict['acknowledgement']
+          
 
             line()
             if  syn==1:
                 print "SYN receive"
                 sendACK(ip_dict,tcp_dict)
                 isSYN=1
+                server_mss = tcp_dict['mss']
+                if client_mss_size < server_mss:
+                    buffer_size = client_mss_size
+                else:
+                    buffer_size = server_mss
+                print 'Server MSS is : ' , server_mss
             elif  ack == 1:
                 print "ACK receive"
                 isACK=1
@@ -391,6 +410,8 @@ packet = make_packet_with_mss(seqNo,nextSeqNo,src_port,dest_port,src_ip,dest_ip,
 sequence,acknowledgement = syncronization(packet)
 print
 
+'''
+
 
 #filePath
 data = filePath
@@ -454,11 +475,9 @@ with open(filePath, 'rb') as f:
         break
     end_time = time.time()
     print "Time elapsed : ", end_time - start_time
-
+'''
 seqNo =acknowledgement 
 nextSeqNo = seqNo+30
-print "sequence---- ",sequence
-print "acknowledgement -- ", acknowledgement
 print "#################################################################"
 print "finalization"
 print "#################################################################"

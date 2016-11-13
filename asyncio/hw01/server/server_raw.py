@@ -4,7 +4,7 @@ import hashlib
 import os
 import time
 
-global buffer_size = 1460
+buffer_size =1500
 server_mss_size = 1460
 RAW_IP = ''
 RAW_PORT = 5000
@@ -69,7 +69,6 @@ def tcp_packet(seq,ackSeq,src_port,dest_port,src_ip,dest_ip,data,flagDict,use_ms
 
         tcp_offset_real = (tcp_offset << 4 ) + 0 
         tcp_flags = fin + (syn << 1) + (rst << 2) + (psh <<3) + (ack << 4) + (urg << 5)
-        print "tcp_flags ",tcp_flags
 
         tmp_hdr = pack('!HHLLBBHHH' , tcp_src_port,tcp_dest_port,tcp_seq, tcp_ack_seq, tcp_offset_real, tcp_flags, tcp_window, tcp_checksum, tcp_urg_ptr)
 	tcp_checksum = make_tcp_checksum(src_ip,dest_ip,tmp_hdr,data)
@@ -81,7 +80,7 @@ def mss_packet():
     mss_type = 2
     mss_length = 4
     mss_value = server_mss_size 
-    mss_pack = pack('BBH', mss_type, mss_length,mss_value)
+    mss_pack = pack('!BBH', mss_type, mss_length,mss_value)
     return mss_pack
 
 
@@ -96,7 +95,7 @@ def make_packet(seq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header):
     data=''
     use_mss=0
     tcp_header = tcp_packet(seq,ackSeq ,src_port,dest_port,src_ip,dest_ip,data,flags,use_mss)
-    return ip_header + tcp_header + +data
+    return ip_header + tcp_header  +data
 
 def verifyChecksum(data, checksum):
     sum = 0
@@ -161,16 +160,16 @@ def unPackTCP_header(packet,iph_length):
 
     h_size = iph_length + tcp_hdr_length * 4
     data_size = len(packet) - h_size
-    if tcp_dict['tcp_hdr_length'] > 20 :
-         option_pack = packet[ip_length+20:h_size]
+    mss=0
+    if tcp_hdr_length > 5 :
+         option_pack = packet[iph_length+20:h_size]
          option_hdr = unpack('!BBH',option_pack)
          option_type = option_hdr[0]
          if option_type == 2:
-             mss_value = option_hdr[2]
-             buffer_size = mss_value
+             mss = option_hdr[2]
     #get data from the packet
     data = packet[h_size:]
-    tcp_dict = {'src_port':src_port,'dest_port':dest_port,'sequence':sequence,'acknowledgement':acknowledgement,'tcp_hdr_length':tcp_hdr_length,'flags':flags,'data':data}
+    tcp_dict = {'src_port':src_port,'dest_port':dest_port,'sequence':sequence,'acknowledgement':acknowledgement,'tcp_hdr_length':tcp_hdr_length,'flags':flags,'data':data , 'mss':mss}
     return tcp_dict
 
 def printIPHeader(ip_dict):
@@ -269,25 +268,6 @@ def sendACK(ip_dict,tcp_dict):
 
 
 
-def recv_fin():
-    arrow_line()
-    print "Fin Wating ..."
-    while True:
-         try:
-def sendACK(ip_dict,tcp_dict):
-    flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':1,'urg':0}
-    ackSeq  = tcp_dict['sequence']+1
-    recvSeq = tcp_dict['acknowledgement'] 
-    src_port = tcp_dict['dest_port']
-    dest_port = tcp_dict['src_port']
-    src_ip = ip_dict['dest_ip']
-    dest_ip = ip_dict['src_ip']
-    ip_header = ip_packet(src_ip,dest_ip) 
-
-    packet = make_packet(recvSeq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header)
-    send_sock.sendto(packet, (dest_ip,dest_port))
-
-
 
 def recv_fin():
     arrow_line()
@@ -320,6 +300,7 @@ def recv_syn():
     print "SYN Wating ..."
     while True:
          try:
+              global buffer_size
               packet= sock.recvfrom(buffer_size)
               ip_dict , tcp_dict= unPack_header(packet)
               if tcp_dict['dest_port'] != RAW_PORT or ip_dict['identification'] !=12345:
@@ -330,6 +311,12 @@ def recv_syn():
               flag_dict= getFlagDict(flags)
               syn = flag_dict['syn']
               if syn==1:
+                   client_mss = tcp_dict['mss']
+                   if server_mss_size < client_mss:
+                       buffer_size = server_mss_size
+                   else:
+                       buffer_size = client_mss
+                   print 'client_mss is ' ,client_mss
                    print "[Receive SYN]"
                    print '[Send ACK]'
                    sendACK(ip_dict,tcp_dict)
@@ -396,7 +383,7 @@ print "############################################################"
 syncronization()
 print 
 
-
+'''
 print "############################################################"
 print"fileName"
 print "############################################################"
@@ -432,6 +419,7 @@ while True:
             break
     end_time = time.time()
     print "Time elapsed : ", end_time - start_time
+'''
 
 
 print "############################################################"
