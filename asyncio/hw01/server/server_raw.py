@@ -5,14 +5,29 @@ import os
 import time
 
 buffer_size =1460
-server_mss_size = 1000
+server_mss_size = 1500
 client_mss_size = 0
 RAW_IP = ''
 RAW_PORT = 5000
-sock= socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
-send_sock=socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
-sock.bind((RAW_IP,RAW_PORT)) 
+try:
+    sock= socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
+    sock.bind((RAW_IP,RAW_PORT)) 
+    sock.settimeout(0.1)
+except socket.error , msg:
+    print "Scoket could not be creadted. Erorr Code : " + str(msg[0]) + ' Message ' +msg[1]
+    sys.exit()
+try:
+    send_sock=socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_RAW)
+except send_sock.error , msg:
+    print "Scoket could not be creadted. Erorr Code : " + str(msg[0]) + ' Message ' +msg[1]
+    sys.exit()
+
 print "ready for client ... "
+
+print "############################################################"
+print"Syncronization"
+print "############################################################"
+syncronization()
 
 def getChecksum(data):
     sum=0
@@ -23,7 +38,20 @@ def getChecksum(data):
             sum = (tempSum & 0xffff) + (tempSum >> 16)    
     return ~sum & 0xffff
 
-#ip header
+def verifyChecksum(data, checksum):
+    sum = 0
+    for i in range(0, len(data), 2):
+        if i+1 < len(data):
+            data16= ord(data[i]) + (ord(data[i+1]) << 8)      
+            tempSum= sum +data16
+            sum = (tempSum & 0xffff) + (tempSum >> 16)      
+    currChk = sum & 0xffff 
+    result = currChk & checksum
+    if result == 0:
+        return True
+    else:
+        return False
+
 def ip_packet(src_ip,dest_ip):
 	ip_ihl = 5
 	ip_ver = 4
@@ -49,8 +77,21 @@ def make_tcp_checksum(src_ip,dest_ip,tmp_hdr,data):
         pseudo_hdr= pack('!4s4sBBH', src_addr, dest_addr , placeholder, protocol, tcp_len)
         tmp = pseudo_hdr + tmp_hdr +data
         tcp_checksum= getChecksum(tmp)
-        #tcp_checksum= checksum(tmp)
 	return tcp_checksum
+
+def make_tcp_checksum_data(src_ip,dest_ip,tmp_hdr,data):
+        src_addr = socket.inet_aton(src_ip)
+        dest_addr = socket.inet_aton(dest_ip)
+        placeholder=0
+        protocol = socket.IPPROTO_TCP
+        tcp_len = len(tmp_hdr) + len(data)
+
+        pseudo_hdr= pack('!4s4sBBH', src_addr, dest_addr , placeholder, protocol, tcp_len)
+        tmp = pseudo_hdr + tmp_hdr +data
+	return tmp
+
+def tcp_packet(seq,ackSeq,src_port,dest_port,src_ip,dest_ip,data,flagDict,use_mss):
+        tcp_src_port = src_port
 
 def tcp_packet(seq,ackSeq,src_port,dest_port,src_ip,dest_ip,data,flagDict,use_mss):
         tcp_src_port = src_port
@@ -74,7 +115,7 @@ def tcp_packet(seq,ackSeq,src_port,dest_port,src_ip,dest_ip,data,flagDict,use_ms
         tmp_hdr = pack('!HHLLBBHHH' , tcp_src_port,tcp_dest_port,tcp_seq, tcp_ack_seq, tcp_offset_real, tcp_flags, tcp_window, tcp_checksum, tcp_urg_ptr)
 	tcp_checksum = make_tcp_checksum(src_ip,dest_ip,tmp_hdr,data)
 
-        tcp_header = pack('!HHLLBBH' , tcp_src_port, tcp_dest_port, tcp_seq, tcp_ack_seq, tcp_offset_real, tcp_flags,  tcp_window) +pack('H' , tcp_checksum) + pack('!H' , tcp_urg_ptr)
+        tcp_header = pack('!HHLLBBH' , tcp_src_port, tcp_dest_port, tcp_seq, tcp_ack_seq, tcp_offset_real, tcp_flags,  tcp_window) +pack('!H' , tcp_checksum) + pack('!H' , tcp_urg_ptr)
 	return tcp_header
 
 def mss_packet():
@@ -114,7 +155,7 @@ def verifyChecksum(data, checksum):
 
 def unPack_header(packet):
     ip_dict = unPackIP_header(packet)
-    tcp_dict = unPackTCP_header(packet,ip_dict['iph_length'])
+    tcp_dict = unPackTCP_header(packet,ip_dict)
     return ip_dict, tcp_dict
 
 def unPackIP_header(packet):
@@ -146,7 +187,11 @@ def getFlagDict(flags):
     flag_dict = {'cwr':cwr,'ece':ece,'urg':urg,'ack':ack,'psh':psh,'rst':rst,'syn':syn,'fin':fin}
     return flag_dict
 
-def unPackTCP_header(packet,iph_length):
+def unPackTCP_header(packet,ip_dict):
+    iph_length = ip_dict['iph_length']
+    src_ip  = ip_dict['src_ip']
+    dest_ip = ip_dict['dest_ip']
+
     packet= packet[0]
     tcp_header = packet[iph_length:iph_length+20]
     tcp_hdr = unpack('!HHLLBBHHH' , tcp_header)
@@ -155,22 +200,33 @@ def unPackTCP_header(packet,iph_length):
     dest_port = tcp_hdr[1]
     sequence = tcp_hdr[2]
     acknowledgement = tcp_hdr[3]
-    doff_reserved = tcp_hdr[4]
-    tcp_hdr_length = doff_reserved >> 4
+    dataoff_reserved = tcp_hdr[4]
+    tcp_hdr_length = dataoff_reserved >> 4
     flags = tcp_hdr[5]
+    window_size = tcp_hdr[6]
+    checksum = tcp_hdr[7]
+    urg_ptr = tcp_hdr[8]
 
-    h_size = iph_length + tcp_hdr_length * 4
-    data_size = len(packet) - h_size
+    data_start_point = iph_length + tcp_hdr_length * 4
+    data_size = len(packet) - data_start_point
     mss=0
     if tcp_hdr_length > 5 :
-         option_pack = packet[iph_length+20:h_size]
+         option_pack = packet[iph_length+20:data_start_point]
          option_hdr = unpack('!BBH',option_pack)
          option_type = option_hdr[0]
          if option_type == 2:
              mss = option_hdr[2]
-    #get data from the packet
-    data = packet[h_size:]
-    tcp_dict = {'src_port':src_port,'dest_port':dest_port,'sequence':sequence,'acknowledgement':acknowledgement,'tcp_hdr_length':tcp_hdr_length,'flags':flags,'data':data , 'mss':mss}
+    data = packet[data_start_point:]
+
+    tcp_real_offset = (tcp_hdr_length << 4) + 0
+    tmp_checksum=0
+    tmp_urg_ptr= 0
+   
+    #get checkSum 
+    tmp_hdr = pack('!HHLLBBHHH' , src_port,dest_port,sequence, acknowledgement,tcp_real_offset , flags, window_size, tmp_checksum, tmp_urg_ptr)
+    checksum_data = make_tcp_checksum_data(src_ip,dest_ip,tmp_hdr,data)
+
+    tcp_dict = {'src_port':src_port,'dest_port':dest_port,'sequence':sequence,'acknowledgement':acknowledgement,'tcp_hdr_length':tcp_hdr_length,'flags':flags,'data':data , 'mss':mss, 'window_size':window_size,'checksum':checksum, 'checksum_data':checksum_data}
     return tcp_dict
 
 def printIPHeader(ip_dict):
@@ -401,23 +457,9 @@ def receiveData():
             print "retransmit NAK packet"
     line()
     return tcp_dict['data']
-'''
-try:
-    sock= socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
-    sock.bind((RAW_IP,RAW_PORT)) 
-    #sock.settimeout(0.1)
-    print "ready for client ... "
-except socket.error , msg:
-    print "Scoket could not be creadted. Erorr Code : " + str(msg[0]) + ' Message ' +msg[1]
-    sys.exit()
-'''
-
-print "############################################################"
-print"Syncronization"
-print "############################################################"
-syncronization()
 print 
 
+print "ready for client ... "
 print "############################################################"
 print"fileName"
 print "############################################################"
@@ -469,11 +511,19 @@ while True:
             ip_dict , tcp_dict= unPack_header(packet)
             if tcp_dict['dest_port'] != RAW_PORT or ip_dict['identification'] !=12345:
                 continue
-            printIPHeader(ip_dict)
-            printTCPHeader(tcp_dict)
+            #printIPHeader(ip_dict)
+            #printTCPHeader(tcp_dict)
 
             sequence= tcp_dict['sequence']
             acknowledgement= tcp_dict['acknowledgement']
+            checksum = tcp_dict['checksum']
+            checksum_data = tcp_dict['checksum_data']
+
+            if verifyChecksum(checksum_data,checksum) == False:
+                print "Checksum is False"
+                print "NAK", sequence
+                sendRST(ip_dict,tcp_dict,sequence)
+                continue
 
             BufferNo = sequence/ buffer_size
              
@@ -483,10 +533,10 @@ while True:
             print "window end : ", wto -1
             
             if BufferNo in range(wfrom,wto):
-                if BufferNo >= seqsize+1:
+                if BufferNo > seqsize:
                     continue 
                 if isACK[BufferNo] !=1:
-                    if BufferNo == seqsize:
+                    if BufferNo == seqsize-1:
                         size += lastframe
                         remain -= lastframe
                     else:    
@@ -523,32 +573,7 @@ while True:
     end_time = time.time()
     print "Time elapsed : ", end_time - start_time
 print '####################### selctive-repeat ARQ ################################'
-
-'''
-size = 0
-remain = int(fileSize)
-
-start_time = time.time()
-while True:
-    with open(fileName, "ab") as f:
-        if remain >= buffer_size:
-            fileInfo = receiveData()
-            f.write(fileInfo)
-            remain -= buffer_size
-            size += buffer_size
-            print size ,"/", fileSize ," (currentsize/totalsize) ,", round((100.00 *size/int(fileSize)),2) ,"%"
-        else:
-            fileInfo = receiveData()
-            f.write(fileInfo)
-            size+=remain
-            print size ,"/", fileSize ," (currentsize/totalsize) ,", round((100.00 *size/int(fileSize)),2) ,"%"
-            print "Completed ...."
-            break
-    end_time = time.time()
-    print "Time elapsed : ", end_time - start_time
-'''
-
-
+print 
 print "############################################################"
 print"finalization"
 print "############################################################"

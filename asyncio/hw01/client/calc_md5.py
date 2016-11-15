@@ -16,6 +16,4 @@ def check_md5(file_path, block_size=8192):
 		md5.update(buf)
 	print(md5.hexdigest())
 
-file_path = '/home/withgod/network_course/asyncio/client/1Mfile'
-
 check_md5(fileName)

@@ -1,0 +1,85 @@
+import asyncio
+import sys
+import time
+import os
+from concurrent.futures import ProcessPoolExecutor
+
+filePath = sys.argv[1]
+fileSize = os.path.getsize(filePath) 
+buffer_size=1000
+
+server_ip ='127.0.0.1'
+server_port = 5000
+
+@asyncio.coroutine
+def tcp_echo_client(data,loop):
+#    print('Send: %r' % data)
+    reader, writer = yield from asyncio.open_connection(server_ip, server_port,loop=loop)
+    writer.write(data)
+#   data = yield from reader.read(buffer_size)
+#   print('Received: %r' % data.decode())
+    writer.close()
+
+
+'''
+data = filePath
+loop.run_until_complete(tcp_echo_client(data,loop))
+
+data = str(fileSize)
+loop.run_until_complete(tcp_echo_client(data,loop))
+
+def take(n,seq,loop):
+    seq = iter(seq)
+    result = []
+    try:
+        for i in range(n):
+            result.append(asyncio.ensure_future(tcp_echo_client(seq.__next__(),loop)))
+    except StopIteration:
+        pass
+    return result
+'''
+
+remain=fileSize
+datas = []
+with open(filePath, 'rb') as f:
+     while True:
+          if remain >= buffer_size:
+             remain -=buffer_size
+             data = f.read(buffer_size)
+#             loop.run_until_complete(tcp_echo_client(data,loop))
+             datas.append(data)
+          else:
+             data = f.read(remain)
+#             loop.run_until_complete(tcp_echo_client(data,loop))
+             datas.append(data)
+             break
+'''
+tasks = take(len(datas),datas,loop)
+tasks = [
+asyncio.ensure_future(tcp_echo_client("a",loop)),
+asyncio.ensure_future(tcp_echo_client("b",loop)),
+asyncio.ensure_future(tcp_echo_client("c",loop))
+]
+loop.run_until_complete(asyncio.gather(*tasks))
+print(tasks)
+'''
+
+@asyncio.coroutine
+def fetch_all(datas,loop):
+    fetches = [asyncio.ensure_future(tcp_echo_client(data,loop)) for data in datas]
+    yield from asyncio.gather(*fetches)
+
+
+start_time = time.time()
+loop = asyncio.get_event_loop()
+data_len = len(datas)
+thread_size = 1000
+print(data_len)
+for i in range(0,data_len,thread_size):
+    loop.run_until_complete(fetch_all(datas[i:i+thread_size],loop))
+
+print('Close the socket')
+loop.close()
+
+end_time = time.time()
+print("Time elapsed : ", end_time - start_time)
