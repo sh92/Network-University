@@ -5,8 +5,11 @@ import os
 import time
 import threading
 
-buffer_size = 1500
-client_mss_size =  500
+buffer_size = 1460
+client_mss_size =  1000
+server_mss_size = 0
+default_hdr_size = 40
+
 filePath = sys.argv[1]
 '''
 dest_ip = sys.argv[1]
@@ -72,7 +75,6 @@ def unPackTCP_header(packet,iph_length):
     data_size = len(packet) - h_size
     mss=0
     if tcp_hdr_length > 5: 
-        print 'mss ok'
         option_pack = packet[iph_length + 20: h_size] 
         option_hdr = unpack('!BBH',option_pack)
         option_type = option_hdr[0]
@@ -240,7 +242,7 @@ def make_packet_with_mss(seqNo,ackNo,src_port,dest_port,src_ip,dest_ip,data,flag
 def syncronization(packet):
     sock.sendto(packet,(dest_ip, dest_port))
     print "[Send SYN]"
-    sequence, acknowledgement = recv_syn_ack()
+    sequence, acknowledgement = recv_syn_ack(packet)
     return sequence,acknowledgement
 
 def finalization(packet):
@@ -266,53 +268,57 @@ def sendACK(ip_dict,tcp_dict):
     sock.sendto(packet, (dest_ip,dest_port))
 
 
-def recv_syn_ack():
+def recv_syn_ack(packet):
     line()
     isSYN=0
     isACK=0
     sequence = 0
     acknowledgement=0
+    ip_dict={}
+    tcp_dict={}
     global buffer_size
+    global client_mss_size
+    global server_mss_size 
+    backup = packet
     while True:
         try:
             if isSYN==1 and isACK==1:
                 break
 
-	    packet= recv_sock.recvfrom(buffer_size)
+	    packet= recv_sock.recvfrom(buffer_size+40)
             ip_dict,tcp_dict = unPack_header(packet)    
-            if tcp_dict['dest_port'] != src_port or tcp_dict['sequence'] == 0:
+            if tcp_dict['dest_port'] != src_port: #or tcp_dict['sequence'] == 0:
                   continue
-
             printIPHeader(ip_dict)
             printTCPHeader(tcp_dict)
+            line()
+
             flags = tcp_dict['flags']
             flag_dict= getFlagDict(flags)
             syn = flag_dict['syn']
             ack = flag_dict['ack']
+            rst = flag_dict['rst']
             sequence=  tcp_dict['sequence']
             acknowledgement =  tcp_dict['acknowledgement']
           
-
-            line()
             if  syn==1:
                 print "SYN receive"
-                sendACK(ip_dict,tcp_dict)
                 isSYN=1
-                server_mss = tcp_dict['mss']
-                if client_mss_size < server_mss:
-                    buffer_size = client_mss_size
-                else:
-                    buffer_size = server_mss
-                print 'Server MSS is : ' , server_mss
+                server_mss_size = tcp_dict['mss']
+                sendACK(ip_dict,tcp_dict)
             elif  ack == 1:
                 print "ACK receive"
                 isACK=1
+            elif  rst == 1:
+                print "[Send SYN]"
+                sock.sendto(backup,(dest_ip, dest_port))
             line()
         except socket.timeout:
               print "time out, resend! seq No :", sequence
-              sock.sendto(packet,(dest_ip, dest_port))
+              sock.sendto(backup,(dest_ip, dest_port))
     line()
     return sequence,acknowledgement
+
 
 def recv_ack():
     sequence=0
@@ -320,7 +326,7 @@ def recv_ack():
     line()
     while True:
         try:
-	    packet= recv_sock.recvfrom(buffer_size)
+	    packet= recv_sock.recvfrom(buffer_size+40)
             ip_dict,tcp_dict = unPack_header(packet)    
             flags = tcp_dict['flags']
             flag_dict= getFlagDict(flags)
@@ -334,8 +340,7 @@ def recv_ack():
             print "ACK receive"
             break
         except socket.timeout:
-              print "time out, resend! seq No:", sequence
-              sock.sendto(packet,(dest_ip, dest_port))
+            print "time out, resend! seq No:", sequence
     line()
     return sequence, acknowledgement
 
@@ -350,7 +355,7 @@ def recv_fin_ack():
         try:
             if isFIN ==1 and isACK ==1:
                 break
-	    packet= recv_sock.recvfrom(buffer_size)
+	    packet= recv_sock.recvfrom(buffer_size+40)
             ip_dict,tcp_dict = unPack_header(packet)    
             if tcp_dict['dest_port'] != src_port or tcp_dict['sequence'] ==0:
                   continue
@@ -372,9 +377,14 @@ def recv_fin_ack():
                 isACK=1
         except socket.timeout:
               print "time out, resend! seq No:", acknowledgement
-              sock.sendto(packet,(dest_ip, dest_port))
+              #sock.sendto(packet,(dest_ip, dest_port))
     line()
     return sequence,acknowledgement
+
+def sendData(data, seqNo, nextSeqNo):
+    flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':0,'urg':0}
+    packet = make_packet(seqNo,nextSeqNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
+    sock.sendto(packet,(dest_ip, dest_port))
  
 
 try:
@@ -408,48 +418,168 @@ data = ''
 flags  = {'fin':0,'syn':1,'rst':0,'psh':0,'ack':0,'urg':0}
 packet = make_packet_with_mss(seqNo,nextSeqNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
 sequence,acknowledgement = syncronization(packet)
+print 
+print 'Server MSS is : ' , server_mss_size
+if client_mss_size < server_mss_size:
+    buffer_size = client_mss_size
+else:
+    buffer_size = server_mss_size
+print 'Established MSS is : ', buffer_size
 print
-
-'''
 
 
 #filePath
 data = filePath
-seqNo =acknowledgement 
+seqNo = acknowledgement
 nextSeqNo = seqNo+ len(data)
 print "#################################################################"
-print "send filePath"
+print "send fileName"
 print "FileName : ", filePath
 print "#################################################################"
 print
+
 flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':0,'urg':0}
 packet = make_packet(seqNo,nextSeqNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
 sock.sendto(packet,(dest_ip, dest_port))
+print "send fileName"
 sequence, acknowledgement = recv_ack()
 print
 
 
 #fileSize
 data = str(fileSize)
-seqNo =acknowledgement 
+seqNo = acknowledgement
 nextSeqNo=  seqNo +len(data)
 print "#################################################################"
 print "send fileSize"
 print "FileSize : ", fileSize
 print "#################################################################"
 print 
+
 flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':0,'urg':0}
 packet = make_packet(seqNo,nextSeqNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
 sock.sendto(packet,(dest_ip, dest_port))
+print "send fileSize"
 sequence, acknowledgement = recv_ack()
 print
 
 
-
+print "##################### Selective reapeat-ARQ start ######################"
+seqNo = 0
+nextSeqNo=seqNo
 start_time = time.time()
 size=0
-remain = fileSize
+Rremain = fileSize
+remain = fileSize % buffer_size
+Rsize = 0
+Buffer = {}
+ACKBuffer ={}
+windowsize=  8
+wfrom=0
+wto=wfrom+windowsize
 
+
+isSend = {}
+isACK = {}
+
+print fileSize
+print windowsize
+totalFileIndex = fileSize /  windowsize
+print totalFileIndex
+
+isSend = isSend.fromkeys(range(fileSize+2),[])
+isACK= isACK.fromkeys(range(fileSize+2),[])
+
+for i in range(totalFileIndex+2):
+    isSend[i].append(0)
+    isACK[i].append(0)
+
+with open(filePath, 'rb') as f:
+    while True:
+        if Rremain== 0 :
+            break
+        print '#### send Frame ####'
+        for i in range(wfrom,wto):
+            if i >=totalFileIndex+1:
+                continue
+            if  isACK[i+1]==1:
+                continue
+            if isSend[i]==1:
+                continue
+            seqNo = nextSeqNo
+            nextSeqNo = seqNo+ buffer_size
+            read_data =f.read(buffer_size)
+            flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':0,'urg':0}
+            packet = make_packet(seqNo,nextSeqNo,src_port,dest_port,src_ip,dest_ip,read_data,flags,ip_header)
+	    Buffer[i%totalFileIndex] = packet 
+            sock.sendto(packet,(dest_ip, dest_port))
+
+        for i in range(wfrom, wto):
+            if i >= totalFileIndex +1:
+                continue
+            if isACK[i+1] ==1:
+                continue
+            if isSend[i] ==1:
+                continue
+            print 'send seqNo', i% totalFileIndex
+            sock.sendto(Buffer[i%totalFileIndex] ,(dest_ip,dest_port))
+            isSend[i]=1
+    
+        start = wfrom
+        end = start+ windowsize        
+        print "window start : ",start
+        print "window end :", end-1
+        try:
+            sequence, acknowledgement = recv_ack()
+            index = (sequence) / buffer_size 
+            if index in range(start,end+1):
+                if isACK[index] ==1:
+                 continue
+                print "ACK receive", index %totalFileIndex
+                if Rremain < buffer_size :
+                     Rremain -= remain
+                     Rsize += remain
+                else:
+                    Rremain-=buffer_size
+                    Rsize += buffer_size
+                print Rsize , "/",fileSize , "(Currentsize/Totalsize) , ", round((100.00 * Rsize/int(fileSize)),2), "%"
+                
+            isACK[index % totalFileIndex] =1
+            #window move
+            if index==wfrom+1:
+                n=index
+                while True:
+                    if n >=totalFileIndex+1:
+                        break
+                    if isACK[n] == 1:
+                       wfrom+=1
+                       wto+=1
+                       n+=1
+                    else:
+                       break 
+            else:
+                if isACK[index+1] ==1:
+                    continue
+                print "NAK receive", index%totalFileIndex
+                print "resend!",index%totalFileIndex
+                sock.sendto(Buffer[(index-1)%totalFileIndex],(dest_ip,dest_port))
+    ### time out ###
+        except socket.timeout:
+            for i in range (start, end):
+                if i>= fileSize+1:
+                    break 
+                if isACK[i+1] ==1:
+                    continue
+                if isSend[i] ==1:
+                    print "Timeout , resend! from seqNo",i%totalFileIndex
+                    sock.sendto(Buffer[i%totalFileIndex],(dest_ip,dest_port))
+                    continue
+
+print "##################### Selective reapeat-ARQ end ######################"
+        
+
+'''
+print "##################### Stop and waitreapeat-ARQ start ######################"
 with open(filePath, 'rb') as f:
     while True:
       if remain >= buffer_size:
@@ -475,7 +605,9 @@ with open(filePath, 'rb') as f:
         break
     end_time = time.time()
     print "Time elapsed : ", end_time - start_time
+print "##################### Stop and waitreapeat-ARQ end ######################"
 '''
+
 seqNo =acknowledgement 
 nextSeqNo = seqNo+30
 print "#################################################################"

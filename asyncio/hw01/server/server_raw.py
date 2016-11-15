@@ -4,8 +4,9 @@ import hashlib
 import os
 import time
 
-buffer_size =1500
-server_mss_size = 1460
+buffer_size =1460
+server_mss_size = 1000
+client_mss_size = 0
 RAW_IP = ''
 RAW_PORT = 5000
 sock= socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
@@ -216,6 +217,13 @@ def arrow_line():
 def syncronization():
     recv_syn()
     recv_ack()
+    global buffer_size
+    print 'Client MSS is ' ,client_mss_size
+    if server_mss_size < client_mss_size:
+         buffer_size = server_mss_size
+    else:
+         buffer_size = client_mss_size
+    print 'Established MSS is', buffer_size
 
 def finalization():
     recv_fin()
@@ -267,6 +275,36 @@ def sendACK(ip_dict,tcp_dict):
     send_sock.sendto(packet, (dest_ip,dest_port))
 
 
+def sendRST(ip_dict,tcp_dict,buffer_no):
+    flags  = {'fin':0,'syn':0,'rst':1,'psh':0,'ack':0,'urg':0}
+    ackSeq  = tcp_dict['sequence']
+    recvSeq = tcp_dict['acknowledgement'] 
+    src_port = tcp_dict['dest_port']
+    dest_port = tcp_dict['src_port']
+    src_ip = ip_dict['dest_ip']
+    dest_ip = ip_dict['src_ip']
+    ip_header = ip_packet(src_ip,dest_ip) 
+
+    packet = make_packet(recvSeq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header)
+    send_sock.sendto(packet, (dest_ip,dest_port))
+
+
+def sendACK(ip_dict,tcp_dict):
+    flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':1,'urg':0}
+    ackSeq  = tcp_dict['sequence']+1
+    recvSeq = tcp_dict['acknowledgement'] 
+    src_port = tcp_dict['dest_port']
+    dest_port = tcp_dict['src_port']
+    src_ip = ip_dict['dest_ip']
+    dest_ip = ip_dict['src_ip']
+    ip_header = ip_packet(src_ip,dest_ip) 
+
+    packet = make_packet(recvSeq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header)
+    send_sock.sendto(packet, (dest_ip,dest_port))
+
+
+
+
 
 
 def recv_fin():
@@ -274,7 +312,7 @@ def recv_fin():
     print "Fin Wating ..."
     while True:
          try:
-              packet= sock.recvfrom(buffer_size)
+              packet= sock.recvfrom(buffer_size+40)
               ip_dict , tcp_dict= unPack_header(packet)
               if tcp_dict['dest_port'] != RAW_PORT or ip_dict['identification']!=12345:
                   continue
@@ -298,10 +336,12 @@ def recv_fin():
 def recv_syn():
     arrow_line()
     print "SYN Wating ..."
+    global buffer_size
+    global client_mss_size
+    global server_mss_size
     while True:
          try:
-              global buffer_size
-              packet= sock.recvfrom(buffer_size)
+              packet= sock.recvfrom(buffer_size+40)
               ip_dict , tcp_dict= unPack_header(packet)
               if tcp_dict['dest_port'] != RAW_PORT or ip_dict['identification'] !=12345:
                   continue
@@ -311,12 +351,7 @@ def recv_syn():
               flag_dict= getFlagDict(flags)
               syn = flag_dict['syn']
               if syn==1:
-                   client_mss = tcp_dict['mss']
-                   if server_mss_size < client_mss:
-                       buffer_size = server_mss_size
-                   else:
-                       buffer_size = client_mss
-                   print 'client_mss is ' ,client_mss
+                   client_mss_size = tcp_dict['mss']
                    print "[Receive SYN]"
                    print '[Send ACK]'
                    sendACK(ip_dict,tcp_dict)
@@ -332,7 +367,7 @@ def recv_ack():
     print "ACK Wating ..."
     while True:
         try:
-            packet= sock.recvfrom(buffer_size)
+            packet= sock.recvfrom(buffer_size+40)
             ip_dict , tcp_dict= unPack_header(packet)
             if tcp_dict['dest_port'] != RAW_PORT or ip_dict['identification'] !=12345:
                 continue
@@ -352,7 +387,7 @@ def receiveData():
     line()
     while True:
         try:
-            packet= sock.recvfrom(buffer_size)
+            packet= sock.recvfrom(buffer_size+40)
             ip_dict , tcp_dict= unPack_header(packet)
             if tcp_dict['dest_port'] != RAW_PORT or ip_dict['identification'] !=12345:
                 continue
@@ -383,21 +418,113 @@ print "############################################################"
 syncronization()
 print 
 
-'''
 print "############################################################"
 print"fileName"
 print "############################################################"
 fileName= receiveData()
 
-
-print
 print "############################################################"
 print"fileSize"
 print "############################################################"
+print
 fileSize= receiveData()
 print
 
 
+
+print '####################### selctive-repeat ARQ ################################'
+size = 0
+remain= int(fileSize)
+
+# window size ande seq size
+seqsize= remain/ buffer_size
+windowsize = 8
+
+print "window size is ", windowsize
+print "seqsize is ", seqsize
+wfrom = 0
+wto = wfrom + windowsize
+
+start_time = time.time()
+Buffer={}
+ACK_BUFFER={}
+isACK = {}
+isACK = isACK.fromkeys(range(seqsize+2),[])
+lastframe = int(fileSize) % buffer_size
+
+
+for i in range(seqsize+2):
+    isACK[i].append(0)
+while True:
+    with open(fileName, "ab") as f:
+            if remain== 0:
+                for i in range(wfrom,seqsize+1):
+                    f.write(Buffer[i%seqsize])
+                print "Completed ...."
+                break
+                
+            framesize = buffer_size
+
+            packet= sock.recvfrom(buffer_size+40)
+            ip_dict , tcp_dict= unPack_header(packet)
+            if tcp_dict['dest_port'] != RAW_PORT or ip_dict['identification'] !=12345:
+                continue
+            printIPHeader(ip_dict)
+            printTCPHeader(tcp_dict)
+
+            sequence= tcp_dict['sequence']
+            acknowledgement= tcp_dict['acknowledgement']
+
+            BufferNo = sequence/ buffer_size
+             
+            print "BufferNo:" ,BufferNo
+            print "seqNo:" ,BufferNo%seqsize
+            print "window start : ",wfrom
+            print "window end : ", wto -1
+            
+            if BufferNo in range(wfrom,wto):
+                if BufferNo >= seqsize+1:
+                    continue 
+                if isACK[BufferNo] !=1:
+                    if BufferNo == seqsize:
+                        size += lastframe
+                        remain -= lastframe
+                    else:    
+                        size += framesize
+                        remain -= framesize
+                    print size ,"/", fileSize ," (currentsize/totalsize) ,", round((100.00 *size/int(fileSize)),2) ,"%"
+                #time.sleep(1)
+                Buffer[BufferNo%seqsize] = tcp_dict['data']
+                isACK[BufferNo]=1
+                if BufferNo==wfrom:
+                    n=BufferNo
+                    while True:
+                        if n >= seqsize+1:
+                            break
+                        if isACK[n] == 1:
+                            f.write(Buffer[n % seqsize])
+                            wfrom+=1
+                            wto+=1
+                            n+=1
+                        else:
+                            break 
+                ACK_BUFFER[BufferNo] = packet
+                sendACK(ip_dict,tcp_dict)
+                print "send ACK",str(BufferNo%seqsize) 
+            else:
+                if isACK[BufferNo] == 1:
+                    tmp_pack = ACK_BUFFER[BufferNo]
+                    ip_dict,tcp_dict = unPack_header(tmp_pack)
+                    sendACK(ip_dict,tcp_dict)
+                    continue
+                print "NAK",BufferNo%seqsize
+                sendRST(ip_dict,tcp_dict,BufferNo)
+
+    end_time = time.time()
+    print "Time elapsed : ", end_time - start_time
+print '####################### selctive-repeat ARQ ################################'
+
+'''
 size = 0
 remain = int(fileSize)
 
