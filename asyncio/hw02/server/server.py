@@ -5,18 +5,38 @@ import time
 fileName =  sys.argv[1]
 buffer_size=10000
 
+def verifyChecksum(data, checksum):
+    sum = 0
+    for i in range(0, len(data), 2):
+        if i+1 < len(data):
+            data16= ord(data[i]) + (ord(data[i+1]) << 8)      
+            tempSum= sum +data16
+            sum = (tempSum & 0xffff) + (tempSum >> 16)      
+    currChk = sum & 0xffff 
+    result = currChk & checksum
+    if result == 0:
+        return True
+    else:
+        return False
+
 @asyncio.coroutine
 def handle_echo(reader, writer):
     with open(fileName, "ab") as f:
+        #recv_data = yield from reader.read(buffer_size)
         data = yield from reader.read(buffer_size)
+        decoded_data = data.decode('utf-8')
+        #checksumSeq= decoded_data[buffer_size:buffer_size+4]
+        #if checksumSeq!='':
+        #    checksum = int(checksumSeq,16)
+        #data = decoded_data[:buf]
+        #    if verifyChecksum(data,checksum) ==True:
         f.write(data)
-        message = data.decode()
         addr = writer.get_extra_info('peername')
-        print("Received %r from %r" % (message, addr))
-#        print("Send: %r" % message)
-        writer.write(data)
+        #print("Received %r from %r" % (data, addr))
+        #print("Send: %r" % data)
+        writer.write("ok".encode('utf-8'))
         yield from writer.drain()
-        print("Close the client socket")
+        print("data received")
         writer.close()
 
 
