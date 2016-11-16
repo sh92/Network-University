@@ -6,22 +6,24 @@ import time
 import threading
 from calc_md5 import md5Check
 
+
+if len(sys.argv) < 3:
+	print '[filePath] [client_mss_size] [dest port] '
+	sys.exit()
+
 filePath = sys.argv[1]
 client_mss_size = int(sys.argv[2])
+dest_port = int(sys.argv[3])
 
 buffer_size = 1460
 server_mss_size = 0
 default_hdr_size = 40
 
-if len(sys.argv) < 2:
-	print '[filePath] [client_mss_size] '
-	sys.exit()
 
 local_ip = socket.gethostbyname(socket.gethostname())
 src_ip = '127.0.0.1'
 dest_ip = '127.0.0.1'
 src_port = 6000
-dest_port = 5000
 
 def unPack_header(packet):
     ip_dict = unPackIP_header(packet)
@@ -118,35 +120,6 @@ def printTCPHeader(tcp_dict):
     line()
     print
 
-def check_md5(file_path, block_size=1460):
-    md5 = hashlib.md5()
-    try:
-        f=open(file_path,'rb')
-    except IOError as e:
-	print(e)
-        return
-    while True:
-        buf =  f.read(block_size)
-        if not buf:
-            break
-        md5.update(buf)
-    return  md5.hexdigest()
-
-def checksum(msg):
-    s = 0
-
-    # loop taking 2 characters at a time
-    for i in range(0, len(msg)-1, 2):
-        w = ord(msg[i]) + (ord(msg[i+1]) << 8 )
-        s = s + w
-
-    s = (s>>16) + (s & 0xffff);
-    s = s + (s >> 16);
-
-    #complement and mask to 4 byte short
-    s = ~s & 0xffff
-
-    return s
 
 
 def getChecksum(data):
@@ -210,7 +183,6 @@ def tcp_packet(seqNo,ackNo,src_port,dest_port,src_ip,dest_ip,data,flagDict, use_
         
         tmp_hdr = pack('!HHLLBBHHH' , tcp_src_port,tcp_dest_port,tcp_seq, tcp_ack_seq, tcp_offset_real, tcp_flags, tcp_window, tcp_checksum, tcp_urg_ptr)
 	tcp_checksum = make_tcp_checksum(src_ip,dest_ip,tmp_hdr,data)
-        #tcp_checksum = getChecksum(data)
 
         tcp_header = pack('!HHLLBBH' , tcp_src_port, tcp_dest_port, tcp_seq, tcp_ack_seq, tcp_offset_real, tcp_flags,  tcp_window) +pack('!H' , tcp_checksum) + pack('!H' , tcp_urg_ptr)
 	return tcp_header
@@ -267,7 +239,7 @@ def sendACK(ip_dict,tcp_dict):
 
 
 def recv_syn_ack(packet):
-    line()
+    #line()
     isSYN=0
     isACK=0
     sequence = 0
@@ -289,7 +261,6 @@ def recv_syn_ack(packet):
                   continue
             #printIPHeader(ip_dict)
             #printTCPHeader(tcp_dict)
-            line()
 
             flags = tcp_dict['flags']
             flag_dict= getFlagDict(flags)
@@ -310,18 +281,17 @@ def recv_syn_ack(packet):
             elif  rst == 1:
                 print "[Send SYN]"
                 sock.sendto(backup,(dest_ip, dest_port))
-            line()
         except socket.timeout:
               print "time out, resend! seq No :", sequence
               sock.sendto(backup,(dest_ip, dest_port))
-    line()
+    #line()
     return sequence,acknowledgement
 
 
 def recv_ack(totalFileIndex=1,Buffer=None):
     sequence=0
     acknowledgement=0
-    line()
+    #line()
     while True:
         try:
 	    packet= recv_sock.recvfrom(buffer_size+40)
@@ -337,18 +307,18 @@ def recv_ack(totalFileIndex=1,Buffer=None):
             if ack==1:
                 sequence = tcp_dict['sequence']
                 acknowledgement= tcp_dict['acknowledgement']
-                print "ACK receive"
+            #    print "ACK receive"
                 break
             elif rst==1 and Buffer is not None:
                 sock.sendto(Buffer[(acknowledgement)%totalFileIndex],(dest_ip,dest_port))
         except socket.timeout:
             print "time out, resend! seq No:", sequence
-    line()
+    #line()
     return sequence, acknowledgement
 
 
 def recv_fin_ack():
-    line()
+    #line()
     isFIN=0
     isACK=0
     sequence=0
@@ -379,7 +349,7 @@ def recv_fin_ack():
                 isACK=1
         except socket.timeout:
               print "time out "
-    line()
+    #line()
     return sequence,acknowledgement
 
 def sendData(data, seqNo, nextSeqNo):
@@ -504,7 +474,7 @@ with open(filePath, 'rb') as f:
     while True:
         if Rremain== 0 :
             break
-        print '#### send Frame ####'
+#        print '#### send Frame ####'
         for i in range(wfrom,wto):
             if i >=totalFileIndex+1:
                 continue
@@ -527,21 +497,21 @@ with open(filePath, 'rb') as f:
                 continue
             if isSend[i] ==1:
                 continue
-            print 'send seqNo', i% totalFileIndex
+#            print 'send seqNo', i% totalFileIndex
             sock.sendto(Buffer[i%totalFileIndex] ,(dest_ip,dest_port))
             isSend[i]=1
     
         start = wfrom
         end = start+ windowsize        
-        print "window start : ",start
-        print "window end :", end-1
+#        print "window start : ",start
+#        print "window end :", end-1
         try:
             sequence, acknowledgement = recv_ack(totalFileIndex,Buffer)
             index = (sequence) / buffer_size 
             if index in range(start,end+1):
                 if isACK[index] ==1:
                  continue
-                print "ACK receive", index %totalFileIndex
+#                print "ACK receive", index %totalFileIndex
                 if Rremain < buffer_size :
                      Rremain -= remain
                      Rsize += remain
@@ -566,8 +536,8 @@ with open(filePath, 'rb') as f:
             else:
                 if isACK[index+1] ==1:
                     continue
-                print "NAK receive", index%totalFileIndex
-                print "resend!",index%totalFileIndex
+#                print "NAK receive", index%totalFileIndex
+#                print "resend!",index%totalFileIndex
                 sock.sendto(Buffer[(index-1)%totalFileIndex],(dest_ip,dest_port))
     ### time out ###
         except socket.timeout:
@@ -577,7 +547,7 @@ with open(filePath, 'rb') as f:
                 if isACK[i+1] ==1:
                     continue
                 if isSend[i] ==1:
-                    print "Timeout , resend! from seqNo",i%totalFileIndex
+#                    print "Timeout , resend! from seqNo",i%totalFileIndex
                     sock.sendto(Buffer[i%totalFileIndex],(dest_ip,dest_port))
                     continue
 

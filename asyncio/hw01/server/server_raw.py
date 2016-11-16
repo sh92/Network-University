@@ -6,6 +6,9 @@ import time
 from calc_md5 import md5Check
 
 
+if len(sys.argv) < 2:
+    print("[PORT] [server mss size]")
+    sys.exit()
 
 buffer_size =1460
 RAW_IP = ''
@@ -13,9 +16,6 @@ RAW_PORT = int(sys.argv[1])
 server_mss_size = int(sys.argv[2])
 client_mss_size = 0
 
-if len(sys.argv) < 2:
-    print("[PORT] [server mss size]")
-    sys.exit()
 print "ready for client ... "
 
 try:
@@ -363,12 +363,9 @@ def sendACK(ip_dict,tcp_dict):
 
 
 
-
-
-
 def recv_fin():
     arrow_line()
-    print "Fin Wating ..."
+#    print "Fin Wating ..."
     while True:
          try:
               packet= sock.recvfrom(buffer_size+40)
@@ -381,11 +378,11 @@ def recv_fin():
               flag_dict= getFlagDict(flags)
               fin  = flag_dict['fin']
               if fin ==1: 
-                   print "[Receive FIN]"
-                   print "Send ACK"
+#                   print "[Receive FIN]"
+#                   print "Send ACK"
                    sendACK(ip_dict,tcp_dict)
 
-                   print "[Send FIN]"
+#                   print "[Send FIN]"
                    sendFIN(ip_dict,tcp_dict)
                    break
          except socket.timeout:
@@ -394,7 +391,7 @@ def recv_fin():
 
 def recv_syn():
     arrow_line()
-    print "SYN Wating ..."
+#    print "SYN Wating ..."
     global buffer_size
     global client_mss_size
     global server_mss_size
@@ -411,10 +408,10 @@ def recv_syn():
               syn = flag_dict['syn']
               if syn==1:
                    client_mss_size = tcp_dict['mss']
-                   print "[Receive SYN]"
-                   print '[Send ACK]'
+#                   print "[Receive SYN]"
+#                   print '[Send ACK]'
                    sendACK(ip_dict,tcp_dict)
-                   print '[Send SYN]'
+#                   print '[Send SYN]'
                    sendSYN(ip_dict,tcp_dict)
                    break
          except socket.timeout:
@@ -430,20 +427,20 @@ def recv_ack():
             ip_dict , tcp_dict= unPack_header(packet)
             if tcp_dict['dest_port'] != RAW_PORT or ip_dict['identification'] !=12345:
                 continue
-            printIPHeader(ip_dict)
-            printTCPHeader(tcp_dict)
+            #printIPHeader(ip_dict)
+            #printTCPHeader(tcp_dict)
             flags = tcp_dict['flags']
             flag_dict= getFlagDict(flags)
             ack = flag_dict['ack']
             if ack == 1:
-                print "[Receive ACK]", tcp_dict['sequence']
+#                print "[Receive ACK]", tcp_dict['sequence']
                 break
         except socket.timeout:
               print "time out, resend! seq No:", stcp_dict['sequence']
 
 
 def receiveData():
-    line()
+    #line()
     while True:
         try:
             packet= sock.recvfrom(buffer_size+40)
@@ -452,13 +449,13 @@ def receiveData():
                 continue
             #printIPHeader(ip_dict)
             #printTCPHeader(tcp_dict)
-            print "send ACK"
+#            print "send ACK"
             sendACK(ip_dict,tcp_dict)
             print
             break
         except socket.timeout:
             print "retransmit NAK packet"
-    line()
+    #line()
     return tcp_dict['data']
 print "############################################################"
 print"Syncronization"
@@ -525,17 +522,17 @@ while True:
             checksum_data = tcp_dict['checksum_data']
 
             if verifyChecksum(checksum_data,checksum) == False:
-                print "Checksum is False"
-                print "NAK", sequence
+#                print "Checksum is False"
+#                print "NAK", sequence
                 sendRST(ip_dict,tcp_dict,sequence)
                 continue
 
             BufferNo = sequence/ buffer_size
              
-            print "BufferNo:" ,BufferNo
-            print "seqNo:" ,BufferNo%seqsize
-            print "window start : ",wfrom
-            print "window end : ", wto -1
+#            print "BufferNo:" ,BufferNo
+#            print "seqNo:" ,BufferNo%seqsize
+#            print "window start : ",wfrom
+#            print "window end : ", wto -1
             
             if BufferNo in range(wfrom,wto):
                 if BufferNo > seqsize:
@@ -565,14 +562,14 @@ while True:
                             break 
                 ACK_BUFFER[BufferNo] = packet
                 sendACK(ip_dict,tcp_dict)
-                print "send ACK",str(BufferNo%seqsize) 
+#                print "send ACK",str(BufferNo%seqsize) 
             else:
                 if isACK[BufferNo] == 1:
                     tmp_pack = ACK_BUFFER[BufferNo]
                     ip_dict,tcp_dict = unPack_header(tmp_pack)
                     sendACK(ip_dict,tcp_dict)
                     continue
-                print "NAK",BufferNo%seqsize
+#                print "NAK",BufferNo%seqsize
                 sendRST(ip_dict,tcp_dict,BufferNo)
 
 end_time = time.time()
