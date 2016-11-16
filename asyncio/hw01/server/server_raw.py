@@ -213,7 +213,7 @@ def unPackTCP_header(packet,ip_dict):
     data_start_point = iph_length + tcp_hdr_length * 4
     data_size = len(packet) - data_start_point
     mss=0
-    if tcp_hdr_length > 5 :
+    if tcp_hdr_length == 6 :
          option_pack = packet[iph_length+20:data_start_point]
          option_hdr = unpack('!BBH',option_pack)
          option_type = option_hdr[0]

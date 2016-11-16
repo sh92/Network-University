@@ -73,7 +73,7 @@ def unPackTCP_header(packet,iph_length):
     h_size = iph_length + tcp_hdr_length * 4
     data_size = len(packet) - h_size
     mss=0
-    if tcp_hdr_length > 5: 
+    if tcp_hdr_length == 6: 
         option_pack = packet[iph_length + 20: h_size] 
         option_hdr = unpack('!BBH',option_pack)
         option_type = option_hdr[0]
