@@ -4,22 +4,19 @@ import hashlib
 import os
 import time
 import threading
+from calc_md5 import md5Check
+
+filePath = sys.argv[1]
+client_mss_size = int(sys.argv[2])
 
 buffer_size = 1460
-client_mss_size =  1460
 server_mss_size = 0
 default_hdr_size = 40
 
-filePath = sys.argv[1]
-'''
-dest_ip = sys.argv[1]
-dest_port = int(sys.argv[2])
-filePath = sys.argv[3]
-
-if len(sys.argv) < 3:
-	print '[Dest IP Addr] [Dest Port] [File Path]'
+if len(sys.argv) < 2:
+	print '[filePath] [client_mss_size] '
 	sys.exit()
-'''
+
 local_ip = socket.gethostbyname(socket.gethostname())
 src_ip = '127.0.0.1'
 dest_ip = '127.0.0.1'
@@ -586,37 +583,6 @@ with open(filePath, 'rb') as f:
 
 print "##################### Selective reapeat-ARQ end ######################"
         
-
-'''
-print "##################### Stop and waitreapeat-ARQ start ######################"
-with open(filePath, 'rb') as f:
-    while True:
-      if remain >= buffer_size:
-        remain -=buffer_size
-        data = f.read(buffer_size)
-        size += buffer_size
-        print size , "/",fileSize , "(Currentsize/Totalsize) , ", round((100.00 * size/int(fileSize)),2), "%"
-        flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':0,'urg':0}
-        packet = make_packet(seqNo,nextSeqNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
-        sock.sendto(packet,(dest_ip, dest_port))
-        time.sleep(1/20.0)
-
-      else:
-        size+=remain
-        data = f.read(remain)
-        print size , "/",fileSize , "(Currentsize/Totalsize) , ", round((100.00 * size/int(fileSize)),2), "%"
-        flags  = {'fin':0,'syn':0,'rst':0,'psh':0,'ack':0,'urg':0}
-        packet = make_packet(seqNo,nextSeqNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
-        sock.sendto(packet,(dest_ip, dest_port))
-        time.sleep(1/20.0)
-
-        print "Completed ..."
-        break
-    end_time = time.time()
-    print "Time elapsed : ", end_time - start_time
-print "##################### Stop and waitreapeat-ARQ end ######################"
-'''
-
 seqNo =acknowledgement 
 nextSeqNo = seqNo+30
 print "#################################################################"
@@ -633,3 +599,6 @@ print
 end_time=time.time()
 
 print "Time elapsed : ", end_time - start_time
+
+m = md5Check(filePath)
+print(m.calc_md5())

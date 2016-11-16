@@ -3,16 +3,24 @@ from struct import *
 import hashlib
 import os
 import time
+from calc_md5 import md5Check
+
+
 
 buffer_size =1460
-server_mss_size = 1500
-client_mss_size = 0
 RAW_IP = ''
-RAW_PORT = 5000
+RAW_PORT = int(sys.argv[1])
+server_mss_size = int(sys.argv[2])
+client_mss_size = 0
+
+if len(sys.argv) < 2:
+    print("[PORT] [server mss size]")
+    sys.exit()
+print "ready for client ... "
+
 try:
     sock= socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
     sock.bind((RAW_IP,RAW_PORT)) 
-    sock.settimeout(0.1)
 except socket.error , msg:
     print "Scoket could not be creadted. Erorr Code : " + str(msg[0]) + ' Message ' +msg[1]
     sys.exit()
@@ -22,12 +30,7 @@ except send_sock.error , msg:
     print "Scoket could not be creadted. Erorr Code : " + str(msg[0]) + ' Message ' +msg[1]
     sys.exit()
 
-print "ready for client ... "
 
-print "############################################################"
-print"Syncronization"
-print "############################################################"
-syncronization()
 
 def getChecksum(data):
     sum=0
@@ -372,8 +375,8 @@ def recv_fin():
               ip_dict , tcp_dict= unPack_header(packet)
               if tcp_dict['dest_port'] != RAW_PORT or ip_dict['identification']!=12345:
                   continue
-              printIPHeader(ip_dict)
-              printTCPHeader(tcp_dict)
+              #printIPHeader(ip_dict)
+              #printTCPHeader(tcp_dict)
               flags = tcp_dict['flags']
               flag_dict= getFlagDict(flags)
               fin  = flag_dict['fin']
@@ -401,8 +404,8 @@ def recv_syn():
               ip_dict , tcp_dict= unPack_header(packet)
               if tcp_dict['dest_port'] != RAW_PORT or ip_dict['identification'] !=12345:
                   continue
-              printIPHeader(ip_dict)
-              printTCPHeader(tcp_dict)
+              #printIPHeader(ip_dict)
+              #printTCPHeader(tcp_dict)
               flags = tcp_dict['flags']
               flag_dict= getFlagDict(flags)
               syn = flag_dict['syn']
@@ -447,8 +450,8 @@ def receiveData():
             ip_dict , tcp_dict= unPack_header(packet)
             if tcp_dict['dest_port'] != RAW_PORT or ip_dict['identification'] !=12345:
                 continue
-            printIPHeader(ip_dict)
-            printTCPHeader(tcp_dict)
+            #printIPHeader(ip_dict)
+            #printTCPHeader(tcp_dict)
             print "send ACK"
             sendACK(ip_dict,tcp_dict)
             print
@@ -457,9 +460,11 @@ def receiveData():
             print "retransmit NAK packet"
     line()
     return tcp_dict['data']
-print 
+print "############################################################"
+print"Syncronization"
+print "############################################################"
+syncronization()
 
-print "ready for client ... "
 print "############################################################"
 print"fileName"
 print "############################################################"
@@ -570,8 +575,8 @@ while True:
                 print "NAK",BufferNo%seqsize
                 sendRST(ip_dict,tcp_dict,BufferNo)
 
-    end_time = time.time()
-    print "Time elapsed : ", end_time - start_time
+end_time = time.time()
+print "Time elapsed : ", end_time - start_time
 print '####################### selctive-repeat ARQ ################################'
 print 
 print "############################################################"
@@ -579,3 +584,6 @@ print"finalization"
 print "############################################################"
 finalization()
 print
+
+m = md5Check(fileName)
+print(m.calc_md5())
