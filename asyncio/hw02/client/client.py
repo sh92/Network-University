@@ -6,16 +6,23 @@ from calc_md5 import md5Check
 from concurrent.futures import ProcessPoolExecutor
 import socket
 
+client_mtu='576'
+arg_lens = len(sys.argv)
+filePath = ''
+if arg_lens <2: 
+    print( '[filePath] [Client mtu] ')
+    print( '[filePath] ')
+    sys.exit()
+elif arg_lens ==2:
+  filePath = sys.argv[1]
+else:
+  filePath = sys.argv[1]
+  client_mtu = sys.argv[2]
 
-filePath = sys.argv[1]
 fileSize = os.path.getsize(filePath) 
-client_mss = sys.argv[2]
 
-if len(sys.argv)  <2:
-  print( '[filePath] [Client mss] ')
-  sys.exit()
 
-buffer_size= int(client_mss)
+buffer_size= int(client_mtu)
 
 server_ip ='127.0.0.1'
 server_port = 5555
@@ -34,19 +41,6 @@ def tcp_echo_client(data,loop):
     writer.close()
     
 
-remain=fileSize
-datas = []
-
-with open(filePath, 'rb') as f:
-     while True:
-          if remain >= buffer_size:
-             remain -=buffer_size
-             data = f.read(buffer_size)
-             datas.append(data)
-          else:
-             data = f.read(remain)
-             datas.append(data)
-             break
 
 def recv_message(message_socket):
      message = message_socket.recv(4096).decode()
@@ -58,7 +52,7 @@ port_number  = 5000
 
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 client_socket.connect((ip_address, port_number))
-client_socket.send((client_mss).encode())
+client_socket.send(str(client_mtu).encode())
 recv_message(client_socket)
 client_socket.close()
 
@@ -68,8 +62,18 @@ start_time = time.time()
 loop = asyncio.get_event_loop()
 
 
-for i in range(len(datas)):
-    loop.run_until_complete(tcp_echo_client(datas[i],loop))
+remain=fileSize
+with open(filePath, 'rb') as f:
+     while True:
+          if remain >= buffer_size:
+             remain -=buffer_size
+             data = f.read(buffer_size)
+             loop.run_until_complete(tcp_echo_client(data,loop))
+          else:
+             data = f.read(remain)
+             loop.run_until_complete(tcp_echo_client(data,loop))
+             break
+
 
 print('Close the socket')
 loop.close()

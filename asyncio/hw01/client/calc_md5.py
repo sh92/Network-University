@@ -17,5 +17,4 @@ class md5Check:
             if not buf:
                 break
             md5.update(buf)
-        print(md5.hexdigest())
         return md5.hexdigest()

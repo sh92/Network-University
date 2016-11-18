@@ -6,15 +6,21 @@ import time
 from calc_md5 import md5Check
 
 
-if len(sys.argv) < 2:
-    print("[PORT] [server mss size]")
-    sys.exit()
-
 buffer_size =1460
 RAW_IP = ''
-RAW_PORT = int(sys.argv[1])
-server_mss_size = int(sys.argv[2])
-client_mss_size = 0
+RAW_PORT=5555
+server_mtu_size = 576
+client_mtu_size = 576
+arg_len = len(sys.argv) 
+if arg_len < 2:
+    print("[PORT] [server mtu size]")
+    print("[PORT]")
+    sys.exit()
+elif arg_len == 2:
+    RAW_PORT = int(sys.argv[1])
+else:
+    RAW_PORT = int(sys.argv[1])
+    server_mtu_size = int(sys.argv[2])
 
 print "ready for client ... "
 
@@ -93,15 +99,13 @@ def make_tcp_checksum_data(src_ip,dest_ip,tmp_hdr,data):
         tmp = pseudo_hdr + tmp_hdr +data
 	return tmp
 
-def tcp_packet(seq,ackSeq,src_port,dest_port,src_ip,dest_ip,data,flagDict,use_mss):
-        tcp_src_port = src_port
 
-def tcp_packet(seq,ackSeq,src_port,dest_port,src_ip,dest_ip,data,flagDict,use_mss):
+def tcp_packet(seq,ackSeq,src_port,dest_port,src_ip,dest_ip,data,flagDict,use_mtu):
         tcp_src_port = src_port
         tcp_dest_port = dest_port
         tcp_seq = seq
         tcp_ack_seq = ackSeq
-        tcp_offset = 5 + use_mss
+        tcp_offset = 5 + use_mtu
         fin = flagDict['fin']
         syn = flagDict['syn']
         rst = flagDict['rst']
@@ -121,25 +125,25 @@ def tcp_packet(seq,ackSeq,src_port,dest_port,src_ip,dest_ip,data,flagDict,use_ms
         tcp_header = pack('!HHLLBBH' , tcp_src_port, tcp_dest_port, tcp_seq, tcp_ack_seq, tcp_offset_real, tcp_flags,  tcp_window) +pack('!H' , tcp_checksum) + pack('!H' , tcp_urg_ptr)
 	return tcp_header
 
-def mss_packet():
-    mss_type = 2
-    mss_length = 4
-    mss_value = server_mss_size 
-    mss_pack = pack('!BBH', mss_type, mss_length,mss_value)
-    return mss_pack
+def mtu_packet():
+    mtu_type = 2
+    mtu_length = 4
+    mtu_value = server_mtu_size 
+    mtu_pack = pack('!BBH', mtu_type, mtu_length,mtu_value)
+    return mtu_pack
 
 
-def make_packet_with_mss(seq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header):
+def make_packet_with_mtu(seq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header):
     data=''
-    use_mss=1
-    tcp_header = tcp_packet(seq,ackSeq ,src_port,dest_port,src_ip,dest_ip,data,flags, use_mss)
-    mss_pack = mss_packet()
-    return ip_header + tcp_header + mss_pack +data
+    use_mtu=1
+    tcp_header = tcp_packet(seq,ackSeq ,src_port,dest_port,src_ip,dest_ip,data,flags, use_mtu)
+    mtu_pack = mtu_packet()
+    return ip_header + tcp_header + mtu_pack +data
 
 def make_packet(seq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header):
     data=''
-    use_mss=0
-    tcp_header = tcp_packet(seq,ackSeq ,src_port,dest_port,src_ip,dest_ip,data,flags,use_mss)
+    use_mtu=0
+    tcp_header = tcp_packet(seq,ackSeq ,src_port,dest_port,src_ip,dest_ip,data,flags,use_mtu)
     return ip_header + tcp_header  +data
 
 def verifyChecksum(data, checksum):
@@ -212,13 +216,13 @@ def unPackTCP_header(packet,ip_dict):
 
     data_start_point = iph_length + tcp_hdr_length * 4
     data_size = len(packet) - data_start_point
-    mss=0
+    mtu=0
     if tcp_hdr_length == 6 :
          option_pack = packet[iph_length+20:data_start_point]
          option_hdr = unpack('!BBH',option_pack)
          option_type = option_hdr[0]
          if option_type == 2:
-             mss = option_hdr[2]
+             mtu = option_hdr[2]
     data = packet[data_start_point:]
 
     tcp_real_offset = (tcp_hdr_length << 4) + 0
@@ -229,7 +233,7 @@ def unPackTCP_header(packet,ip_dict):
     tmp_hdr = pack('!HHLLBBHHH' , src_port,dest_port,sequence, acknowledgement,tcp_real_offset , flags, window_size, tmp_checksum, tmp_urg_ptr)
     checksum_data = make_tcp_checksum_data(src_ip,dest_ip,tmp_hdr,data)
 
-    tcp_dict = {'src_port':src_port,'dest_port':dest_port,'sequence':sequence,'acknowledgement':acknowledgement,'tcp_hdr_length':tcp_hdr_length,'flags':flags,'data':data , 'mss':mss, 'window_size':window_size,'checksum':checksum, 'checksum_data':checksum_data}
+    tcp_dict = {'src_port':src_port,'dest_port':dest_port,'sequence':sequence,'acknowledgement':acknowledgement,'tcp_hdr_length':tcp_hdr_length,'flags':flags,'data':data , 'mtu':mtu, 'window_size':window_size,'checksum':checksum, 'checksum_data':checksum_data}
     return tcp_dict
 
 def printIPHeader(ip_dict):
@@ -276,13 +280,22 @@ def arrow_line():
 def syncronization():
     recv_syn()
     recv_ack()
+def match_mtu():
     global buffer_size
-    print 'Client MSS is ' ,client_mss_size
-    if server_mss_size < client_mss_size:
-         buffer_size = server_mss_size
+    global client_mtu_size
+    global server_mtu_size
+    print 'Client MSS is ' ,client_mtu_size
+    if server_mtu_size < client_mtu_size:
+         buffer_size = server_mtu_size
     else:
-         buffer_size = client_mss_size
+         buffer_size = client_mtu_size
     print 'Established MSS is', buffer_size
+'''
+    if buffer_size < 576:
+        buffer_size = 576
+    elif buffer_size > 1500:
+        buffer_size = 1500
+'''
 
 def finalization():
     recv_fin()
@@ -302,7 +315,7 @@ def sendSYN(ip_dict,tcp_dict):
 
     ip_header = ip_packet(src_ip,dest_ip) 
 
-    packet = make_packet_with_mss(recvSeq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header)
+    packet = make_packet_with_mtu(recvSeq,ackSeq,src_port,dest_port,src_ip,dest_ip,flags,ip_header)
     send_sock.sendto(packet, (dest_ip,dest_port))
 
 
@@ -393,8 +406,8 @@ def recv_syn():
     arrow_line()
 #    print "SYN Wating ..."
     global buffer_size
-    global client_mss_size
-    global server_mss_size
+    global client_mtu_size
+    global server_mtu_size
     while True:
          try:
               packet= sock.recvfrom(buffer_size+40)
@@ -407,11 +420,12 @@ def recv_syn():
               flag_dict= getFlagDict(flags)
               syn = flag_dict['syn']
               if syn==1:
-                   client_mss_size = tcp_dict['mss']
-#                   print "[Receive SYN]"
-#                   print '[Send ACK]'
+                   client_mtu_size = tcp_dict['mtu']
+#                  print "[Receive SYN]"
+#                  print '[Send ACK]'
+                   match_mtu()
                    sendACK(ip_dict,tcp_dict)
-#                   print '[Send SYN]'
+#                  print '[Send SYN]'
                    sendSYN(ip_dict,tcp_dict)
                    break
          except socket.timeout:
@@ -457,6 +471,8 @@ def receiveData():
             print "retransmit NAK packet"
     #line()
     return tcp_dict['data']
+
+
 print "############################################################"
 print"Syncronization"
 print "############################################################"

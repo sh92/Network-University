@@ -4,13 +4,19 @@ import time
 from calc_md5 import md5Check
 import socket
 
-if len(sys.argv)  <2:
-     print('[FilePath to write] [server_mss_size] ')
+server_mtu_size=576
+len_args = len(sys.argv) 
+if len_args  < 2 :
+     print('[FilePath to write] [server_mtu_size] ')
+     print('[FilePath to write]')
      sys.exit()
-fileName =  sys.argv[1]
-server_mss_size = int(sys.argv[2])
+elif len_args == 2:
+     fileName =  sys.argv[1]
+else:
+     fileName =  sys.argv[1]
+     server_mtu_size = int(sys.argv[2])
 
-buffer_size = int(server_mss_size)
+buffer_size = int(server_mtu_size)
 @asyncio.coroutine
 def handle_echo(reader, writer):
     with open(fileName, "ab") as f:
@@ -24,14 +30,14 @@ def handle_echo(reader, writer):
 #        print("data received")
         writer.close()
 
-def recv_client_mss_size(client_socket,addr,server_socket):
+def recv_client_mtu_size(client_socket,addr,server_socket):
         message = client_socket.recv(4096).decode()
-        print("client mss size : ",message) 
-        client_mss_size = int(message)
-        if client_mss_size< server_mss_size: 
-             buffer_size = client_mss_size
+        print("client mtu size : ",message) 
+        client_mtu_size = int(message)
+        if client_mtu_size< server_mtu_size: 
+             buffer_size = client_mtu_size
         else:
-             buffer_size = server_mss_size
+             buffer_size = server_mtu_size
         client_socket.sendto(str(buffer_size).encode(),addr)
         
 
@@ -43,7 +49,7 @@ server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 server_socket.bind((ip_address, port_number))
 server_socket.listen(10)
 client_sock, addr = server_socket.accept()
-recv_client_mss_size(client_sock,addr, server_socket)
+recv_client_mtu_size(client_sock,addr, server_socket)
 
 
 loop = asyncio.get_event_loop()

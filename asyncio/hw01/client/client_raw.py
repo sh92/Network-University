@@ -3,20 +3,28 @@ from struct import *
 import hashlib
 import os
 import time
-import threading
 from calc_md5 import md5Check
 
+arg_size = len(sys.argv)
+filePath = ''
+dest_port = 5555
+client_mtu_size = 576
 
-if len(sys.argv) < 3:
-	print '[filePath] [client_mss_size] [dest port] '
-	sys.exit()
+if len(sys.argv) == 4:
+    filePath = sys.argv[1]
+    dest_port = int(sys.argv[2])
+    client_mtu_size = int(sys.argv[3])
+elif len(sys.argv) == 3:
+    filePath = sys.argv[1]
+    dest_port = int(sys.argv[2])
+else:
+    print '[filePath] [dest_port] [client_mtu_size]'
+    print '[filePath] [dest_port] '
+    sys.exit()
 
-filePath = sys.argv[1]
-client_mss_size = int(sys.argv[2])
-dest_port = int(sys.argv[3])
 
 buffer_size = 1460
-server_mss_size = 0
+server_mtu_size = 0
 default_hdr_size = 40
 
 
@@ -24,6 +32,7 @@ local_ip = socket.gethostbyname(socket.gethostname())
 src_ip = '127.0.0.1'
 dest_ip = '127.0.0.1'
 src_port = 6000
+
 
 def unPack_header(packet):
     ip_dict = unPackIP_header(packet)
@@ -72,17 +81,16 @@ def unPackTCP_header(packet,iph_length):
 
     h_size = iph_length + tcp_hdr_length * 4
     data_size = len(packet) - h_size
-    mss=0
+    mtu=0
     if tcp_hdr_length == 6: 
         option_pack = packet[iph_length + 20: h_size] 
         option_hdr = unpack('!BBH',option_pack)
         option_type = option_hdr[0]
         if option_type == 2:
-            mss = option_hdr[2]
+            mtu = option_hdr[2]
      
-    #get data from the packet
     data = packet[h_size:]
-    tcp_dict = {'src_port':src_port,'dest_port':dest_port,'sequence':sequence,'acknowledgement':acknowledgement,'tcp_hdr_length':tcp_hdr_length,'flags':flags,'data':data, 'mss':mss} 
+    tcp_dict = {'src_port':src_port,'dest_port':dest_port,'sequence':sequence,'acknowledgement':acknowledgement,'tcp_hdr_length':tcp_hdr_length,'flags':flags,'data':data, 'mtu':mtu} 
     return tcp_dict
 
 def printIPHeader(ip_dict):
@@ -161,13 +169,13 @@ def make_tcp_checksum(src_ip,dest_ip,tmp_hdr,data):
         #tcp_checksum = getChecksum(data)
 	return tcp_checksum
 
-def tcp_packet(seqNo,ackNo,src_port,dest_port,src_ip,dest_ip,data,flagDict, use_mss):
+def tcp_packet(seqNo,ackNo,src_port,dest_port,src_ip,dest_ip,data,flagDict, use_mtu):
 
         tcp_src_port = src_port
         tcp_dest_port = dest_port
         tcp_seq = seqNo
         tcp_ack_seq = ackNo
-        tcp_offset = 5+use_mss
+        tcp_offset = 5+use_mtu
         fin = flagDict['fin']
         syn = flagDict['syn']
         rst = flagDict['rst']
@@ -192,21 +200,21 @@ def line():
     print '-----------------------------------------------------------------------' 
 
 def make_packet(seqNo,ackNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header):
-    use_mss=0
-    tcp_header = tcp_packet(seqNo,ackNo, src_port,dest_port,src_ip,dest_ip, data,flags,use_mss)
+    use_mtu=0
+    tcp_header = tcp_packet(seqNo,ackNo, src_port,dest_port,src_ip,dest_ip, data,flags,use_mtu)
     return ip_header + tcp_header + data
-def make_mssPack():
-    mss_type=2
-    mss_length=4
-    mss_value=client_mss_size
-    mss_pack= pack('!BBH',mss_type,mss_length,mss_value)
-    return mss_pack
+def make_mtuPack():
+    mtu_type=2
+    mtu_length=4
+    mtu_value=client_mtu_size
+    mtu_pack= pack('!BBH',mtu_type,mtu_length,mtu_value)
+    return mtu_pack
 
-def make_packet_with_mss(seqNo,ackNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header):
-    use_mss=1
-    tcp_header = tcp_packet(seqNo,ackNo, src_port,dest_port,src_ip,dest_ip, data,flags,use_mss)
-    mss_pack = make_mssPack()
-    return ip_header + tcp_header + mss_pack +data
+def make_packet_with_mtu(seqNo,ackNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header):
+    use_mtu=1
+    tcp_header = tcp_packet(seqNo,ackNo, src_port,dest_port,src_ip,dest_ip, data,flags,use_mtu)
+    mtu_pack = make_mtuPack()
+    return ip_header + tcp_header + mtu_pack +data
 
 
 def syncronization(packet):
@@ -247,8 +255,8 @@ def recv_syn_ack(packet):
     ip_dict={}
     tcp_dict={}
     global buffer_size
-    global client_mss_size
-    global server_mss_size 
+    global client_mtu_size
+    global server_mtu_size 
     backup = packet
     while True:
         try:
@@ -273,7 +281,7 @@ def recv_syn_ack(packet):
             if  syn==1:
                 print "SYN receive"
                 isSYN=1
-                server_mss_size = tcp_dict['mss']
+                server_mtu_size = tcp_dict['mtu']
                 sendACK(ip_dict,tcp_dict)
             elif  ack == 1:
                 print "ACK receive"
@@ -373,8 +381,6 @@ packet = ' '
 ip_header = ip_packet(src_ip,dest_ip)
 
 fileSize = os.path.getsize(filePath) 
-windowsize=  8
-totalFileIndex = fileSize /  windowsize
 
 
 
@@ -394,16 +400,27 @@ seqNo=0
 nextSeqNo = seqNo +30
 data = ''
 flags  = {'fin':0,'syn':1,'rst':0,'psh':0,'ack':0,'urg':0}
-packet = make_packet_with_mss(seqNo,nextSeqNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
+packet = make_packet_with_mtu(seqNo,nextSeqNo,src_port,dest_port,src_ip,dest_ip,data,flags,ip_header)
 sequence,acknowledgement = syncronization(packet)
 print 
-print 'Server MSS is : ' , server_mss_size
-if client_mss_size < server_mss_size:
-    buffer_size = client_mss_size
+print 'Server MTU is : ' , server_mtu_size
+if client_mtu_size < server_mtu_size:
+    buffer_size = client_mtu_size
 else:
-    buffer_size = server_mss_size
-print 'Established MSS is : ', buffer_size
+    buffer_size = server_mtu_size
+'''
+if buffer_size <576:
+    buffer_size = 576
+elif buffer_size >1500:
+    buffer_size = 1500
+'''
+print 'Established MTU is : ', buffer_size
 print
+
+seqsize = int(fileSize)/buffer_size
+windowsize= 8
+print "windo size ", windowsize
+totalFileIndex =  fileSize/buffer_size
 
 
 #filePath
