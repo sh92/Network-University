@@ -1,0 +1,21 @@
+<html>
+<head>
+  <title>
+    {% block head_title %}PHUE PHUE{% endblock head_title%}
+  </title>
+  <style>
+  {% block style %}
+  h1{
+    font-size: 30px;
+    font-weight: bold;
+  }
+  {% endblock style%}`
+  </style>
+</head>
+<body>
+    <div class='container'>
+      {% block content %}
+      {% endblock content%}
+    </div>
+</body>
+</html>

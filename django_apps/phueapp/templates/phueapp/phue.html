@@ -1,0 +1,33 @@
+{% extends "phueapp/base.html"%}
+{% block content %}
+<h1>PHUE CHNAGE APP</h1>
+
+<form method="POST" action='/phueapp/on_off/'>{%csrf_token%}
+<label for ="ON_OFF">PHUE ON/OFF BUTTON </label>
+<input type="submit" value ="ON/OFF"/>
+</form>
+
+<form method="POST" action='/phueapp/change123/'>{%csrf_token%}
+<label for ="ON_OFF">PHUE Random Color Change 1->2->3  </label>
+<input type="submit" value ="change123"/>
+</form>
+
+<br>
+Selct Britness
+<form method="POST" action='/phueapp/changeBright/'>{%csrf_token%}
+<input type="range" id="bright"name="bright" value="0" min =0 max=254>
+<br>
+<input type="submit" value ="apply bright"/>
+</form>
+
+<br>
+Select Color!
+<form method="POST" action='/phueapp/changeColor/'>{%csrf_token%}
+XColor:<input type="range" id="XColor"name="XColor" value="0" min=0 max=255>
+<br>
+YColor:<input type="range" id="YColor"name="YColor" value="0" min=0 max=255>
+<br>
+<input type="submit" value ="apply color"/>
+</form>
+
+{%endblock content%}
