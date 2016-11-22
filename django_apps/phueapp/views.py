@@ -20,8 +20,8 @@ def change123(request):
 
 def changeColor(request):
     p = phue_app("192.168.0.16")
-    x = float(int(request.POST.get('XColor'))/255)
-    y = float(int(request.POST.get('YColor'))/255)
+    x = float(float(request.POST.get('XColor'))/255.0)
+    y = float(float(request.POST.get('YColor'))/255.0)
     p.color_change(1,x,y)
     p.color_change(2,x,y)
     p.color_change(3,x,y)
