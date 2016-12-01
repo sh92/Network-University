@@ -1,22 +1,50 @@
 import socket
 import sys
+import threading
 
 server = socket.gethostbyname('irc.freenode.org')
 channel = "#sanghee"
 arg_lens =  len(sys.argv)
-botnick = sys.argv[1]
+botnick = "H201202160"
+#str(sys.argv[1])
+
+def recv_message(message_socket,client_ID):
+    while True:
+        message = message_socket.recv(4096).decode()
+        sys.stdout.write(message)
+        if message[8:11].lower() == 'quit':
+            break
+    print('Host Disconnected')
+
+def send_message(my_socket,client_ID):
+    while True:
+        message = input('')
+        if message[0:4].lower() == 'quit':
+            break
+        else:
+            message = 'PRIVMSG '+channel+' : '+message+"\r\n"
+            my_socket.send(message.encode())
+    print('Host Disconnect')
+    message = '\nExit chatroom'
+    my_socket.send(message.encode())
+    my_socket.close()
+    sys.exit()
+
 
 
 irc = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #defines the socket
-print "connecting to:"+server
+print("connecting to:"+server)
 irc.connect((server, 6667))                                                         #connects to the server
-irc.send("USER "+ botnick +" "+ botnick +" "+ botnick +" :This is a fun bot!\n") #user authentication
-irc.send("NICK "+ botnick +"\n")                            #sets nick
-irc.send("PRIVMSG nickserv :iNOOPE\r\n")    #auth
-irc.send("JOIN "+ channel +"\n")   
-while 1:    #puts it in a loop
-    text=irc.recv(2040)  #receive the text
-    print text 
-    if text.find('PING') != -1:                          #check if 'PING' is found
-        irc.send('PONG ' + text.split() [1] + '\r\n') #returnes 'PONG' back to the server (prevents pinging out!)
+user = "USER "+ botnick +" "+ botnick +" "+ botnick +" :This is a fun bot!\n"
+irc.send(user.encode())
+nick = "NICK "+ botnick +"\n"
+irc.send(nick.encode())
+priv= "PRIVMSG nickserv :iNOOPE\r\n"
+irc.send(priv.encode())
 
+join = "JOIN "+ channel +"\n"
+irc.send(join.encode())
+
+
+threading.Thread(target = recv_message, args=(irc,botnick)).start()
+threading.Thread(target = send_message, args=(irc,botnick)).start()
