@@ -27,20 +27,12 @@ class phue_app:
         b.set_light(3,command)
 
 
-    def on_off(self):
+    def on_off(self,num,on_off):
         b = self.bridge
-        t = b.get_light(1,"on")
-        t2 = b.get_light(2,"on")
-        t3 = b.get_light(2,"on")
-
-        if t == True or  t2 == True or  t3 == True  :
-            b.set_light(1,"on",False)
-            b.set_light(2,"on",False)
-            b.set_light(3,"on",False)
-        else:
-            b.set_light(1,"on",True)
-            b.set_light(2,"on",True)
-            b.set_light(3,"on",True)
+	if on_off == 0:
+            b.set_light(num,"on",False)
+        elif on_off == 1:
+            b.set_light(num,"on",True)
 
 
     def color_change(self,no,x,y):
