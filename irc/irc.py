@@ -3,7 +3,8 @@ import sys
 
 server = socket.gethostbyname('irc.freenode.org')
 channel = "#sanghee"
-botnick = "myNickName2"
+arg_lens =  len(sys.argv)
+botnick = sys.argv[1]
 
 
 irc = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #defines the socket
