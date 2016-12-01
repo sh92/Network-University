@@ -1,11 +1,13 @@
 import socket
 import sys
 import threading
+from phue_module import phue_app
 
 server = socket.gethostbyname('irc.freenode.org')
 channel = "#sanghee"
 arg_lens =  len(sys.argv)
 botnick = "H201202160"
+phue_bridge_ip = '192.168.0.16'
 #str(sys.argv[1])
 
 def recv_message(message_socket,client_ID):
@@ -34,11 +36,14 @@ def send_message(my_socket,client_ID):
 
 irc = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #defines the socket
 print("connecting to:"+server)
-irc.connect((server, 6667))                                                         #connects to the server
+irc.connect((server, 6667))                                                        
+
 user = "USER "+ botnick +" "+ botnick +" "+ botnick +" :This is a fun bot!\n"
 irc.send(user.encode())
+
 nick = "NICK "+ botnick +"\n"
 irc.send(nick.encode())
+
 priv= "PRIVMSG nickserv :iNOOPE\r\n"
 irc.send(priv.encode())
 
