@@ -6,7 +6,7 @@ import time
 
 botnick = "H201202160"
 server = socket.gethostbyname('irc.freenode.org')
-channel = "#CNU_SH"
+channel = "#SHSHSH"
 arg_lens =  len(sys.argv)
 phue_bridge_ip = '192.168.0.16'
 
@@ -29,10 +29,15 @@ def recv_message(message_socket,client_ID):
 	elif option == 'B':
 		bright = int(clist[3])
 		p.bright_change(num,bright)
-	elif option ==  'C':
+	elif option == 'C':
 		x = float(clist[3])
 		y = float(clist[4])
 		p.color_change(num,x,y)
+	phue_msg = 'PRIVMSG '+channel+" : "
+	phue_msg +=p.showPhue()
+	phue_msg +="\r\n"
+	message_socket.send(phue_msg.encode())
+	
 	
         if message[8:11].lower() == 'quit':
             break
@@ -65,6 +70,6 @@ irc.send(priv.encode())
 join = "JOIN "+ channel +"\n"
 irc.send(join.encode())
 
-time.sleep(1)
+time.sleep(2)
 threading.Thread(target = recv_message, args=(irc,botnick)).start()
 threading.Thread(target = send_message, args=(irc,botnick)).start()

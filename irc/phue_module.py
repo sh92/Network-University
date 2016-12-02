@@ -11,20 +11,16 @@ class phue_app:
         self.bridge.connect()
 
 
-    def change123(self):
+    def showPhue(self):
         b=self.bridge
         lights = b.get_light_objects()
-        b.set_light([1,2,3], 'bri',0)
-        time.sleep(1)
-        for light in lights:
-        	light.britness=254
-        	light.xy = [random.random(), random.random()]
-        command={'transitiontime' : 10,'on':True,'bri':254}
-        b.set_light(1,command)
-        time.sleep(0.2)
-        b.set_light(2,command)
-        time.sleep(0.2)
-        b.set_light(3,command)
+        lights_id = b.get_light_objects('id')
+	phue_str = ''
+	for light,lid in zip(lights,lights_id):
+		phue_str += str(lid) +" : "
+		phue_str += light.name + ", "
+	print phue_str
+	return phue_str
 
 
     def on_off(self,num,on_off):
